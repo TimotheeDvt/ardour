@@ -103,6 +103,7 @@ namespace ARDOUR {
 	class RouteGroup;
 	class Session;
 	class Track;
+	class TrackFolder;
 }
 
 class AnalysisWindow;
@@ -248,6 +249,7 @@ public:
 	void set_selected_regionview_from_region_list (std::shared_ptr<ARDOUR::Region> region, ARDOUR::SelectionOperation op = ARDOUR::SelectionSet);
 
 	void remove_tracks ();
+	void create_folder_from_selection ();
 
 	/* tempo */
 
@@ -762,6 +764,12 @@ private:
 	void add_instrument_routes (ARDOUR::RouteList&);
 	void timeaxisview_deleted (TimeAxisView*);
 	void add_vcas (ARDOUR::VCAList&);
+
+	void add_folder (std::shared_ptr<ARDOUR::TrackFolder>);
+	void remove_folder (std::shared_ptr<ARDOUR::TrackFolder>);
+	void rebuild_folded_route_map ();
+	bool folded_under_collapsed_folder (TimeAxisView*) const;
+	std::map<PBD::ID, std::shared_ptr<ARDOUR::TrackFolder> > _folded_route_folder_map;
 
 	Gtk::VBox global_vpacker;
 

@@ -78,6 +78,8 @@
 #include "ardour/session_playlists.h"
 #include "ardour/source.h"
 #include "ardour/strip_silence.h"
+#include "ardour/track_folder.h"
+#include "ardour/track_folder_list.h"
 #include "ardour/transient_detector.h"
 #include "ardour/transport_master_manager.h"
 #include "ardour/transpose.h"
@@ -8041,7 +8043,11 @@ edit your ardour.rc file to set the\n\
 		 * So simply switch to the master-bus (if present)
 		 */
 		for (TrackViewList::iterator i = track_views.begin(); i != track_views.end(); ++i) {
-			if ((*i)->stripable ()->is_master ()) {
+			/* stripable() may be null (e.g. for a FolderTimeAxisView, which
+			 * is not backed by a Stripable at all).
+			 */
+			std::shared_ptr<Stripable> s = (*i)->stripable ();
+			if (s && s->is_master ()) {
 				set_selected_mixer_strip (*(*i));
 				break;
 			}
@@ -8067,6 +8073,55 @@ edit your ardour.rc file to set the\n\
 	 * destructors are called,
 	 * diskstream drops references, save_state is called (again for every track)
 	 */
+}
+
+void
+Editor::create_folder_from_selection ()
+{
+	TrackSelection& ts (selection->tracks);
+
+	if (ts.empty ()) {
+		return;
+	}
+
+	vector<std::shared_ptr<Route> > routes;
+
+	for (TrackSelection::iterator x = ts.begin (); x != ts.end (); ++x) {
+		RouteTimeAxisView* rtv = dynamic_cast<RouteTimeAxisView*> (*x);
+		if (!rtv) {
+			/* not a route (e.g. a VCA or another folder header) */
+			continue;
+		}
+		routes.push_back (rtv->route ());
+	}
+
+	if (routes.empty ()) {
+		return;
+	}
+
+	XMLNode& before (_session->track_folders ()->get_state ());
+
+	/* a route belongs to at most one folder; drop it from any existing
+	 * folder before adding it to the new one.
+	 */
+	for (auto const& r : routes) {
+		std::shared_ptr<TrackFolder> existing = _session->track_folders ()->folder_for_route (r);
+		if (existing) {
+			existing->remove_route (r);
+		}
+	}
+
+	std::shared_ptr<TrackFolder> folder = _session->track_folders ()->new_folder (_("Folder"));
+	for (auto const& r : routes) {
+		folder->add_route (r);
+	}
+	_session->track_folders ()->add (folder);
+
+	XMLNode& after (_session->track_folders ()->get_state ());
+
+	begin_reversible_command (_("Create Folder"));
+	_session->add_command (new MementoCommand<TrackFolderList> (*(_session->track_folders ()), &before, &after));
+	commit_reversible_command ();
 }
 
 void

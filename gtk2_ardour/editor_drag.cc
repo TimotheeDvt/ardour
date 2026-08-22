@@ -69,6 +69,7 @@
 #include "editor.h"
 #include "editor_cursors.h"
 #include "editor_drag.h"
+#include "folder_time_axis_view.h"
 #include "gui_thread.h"
 #include "keyboard.h"
 #include "mergeable_line.h"
@@ -662,10 +663,31 @@ EditorDrag::EditorDrag (Editor& e, ArdourCanvas::Item *i, Temporal::TimeDomain t
 }
 
 struct TimeAxisViewStripableSorter {
+	std::shared_ptr<ARDOUR::Stripable> sort_key (TimeAxisView* tav) const
+	{
+		if (FolderTimeAxisView* ftav = dynamic_cast<FolderTimeAxisView*> (tav)) {
+			return ftav->anchor_route ();
+		}
+		return tav->stripable ();
+	}
+
 	bool operator() (TimeAxisView* tav_a, TimeAxisView* tav_b)
 	{
-		std::shared_ptr<ARDOUR::Stripable> const& a = tav_a->stripable ();
-		std::shared_ptr<ARDOUR::Stripable> const& b = tav_b->stripable ();
+		std::shared_ptr<ARDOUR::Stripable> a = sort_key (tav_a);
+		std::shared_ptr<ARDOUR::Stripable> b = sort_key (tav_b);
+
+		if (!a && !b) {
+			return tav_a < tav_b;
+		}
+		if (!a) {
+			return true;
+		}
+		if (!b) {
+			return false;
+		}
+		if (a == b) {
+			return dynamic_cast<FolderTimeAxisView*> (tav_a) != 0;
+		}
 		return ARDOUR::Stripable::Sorter () (a, b);
 	}
 };

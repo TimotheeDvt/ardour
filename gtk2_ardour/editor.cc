@@ -84,6 +84,8 @@
 #include "ardour/route_group.h"
 #include "ardour/session_playlists.h"
 #include "ardour/tempo.h"
+#include "ardour/track_folder.h"
+#include "ardour/track_folder_list.h"
 #include "ardour/utils.h"
 #include "ardour/vca_manager.h"
 #include "ardour/vca.h"
@@ -157,6 +159,7 @@
 #include "selection_properties_box.h"
 #include "simple_progress_dialog.h"
 #include "sfdb_ui.h"
+#include "folder_time_axis_view.h"
 #include "time_axis_view.h"
 #include "timers.h"
 #include "ui_config.h"
@@ -1375,6 +1378,8 @@ Editor::set_session (Session *t)
 	_session->vca_manager().VCAAdded.connect (_session_connections, invalidator (*this), std::bind (&Editor::add_vcas, this, _1), gui_context());
 	_session->RouteAdded.connect (_session_connections, invalidator (*this), std::bind (&Editor::add_routes, this, _1), gui_context());
 	_session->InstrumentRouteAdded.connect (_session_connections, invalidator (*this), std::bind (&Editor::add_instrument_routes, this, _1), gui_context());
+	_session->track_folders ()->TrackFolderAdded.connect (_session_connections, invalidator (*this), std::bind (&Editor::add_folder, this, _1), gui_context());
+	_session->track_folders ()->TrackFolderRemoved.connect (_session_connections, invalidator (*this), std::bind (&Editor::remove_folder, this, _1), gui_context());
 	_session->DirtyChanged.connect (_session_connections, invalidator (*this), std::bind (&Editor::update_title, this), gui_context());
 	_session->Located.connect (_session_connections, invalidator (*this), std::bind (&Editor::located, this), gui_context());
 	_session->config.ParameterChanged.connect (_session_connections, invalidator (*this), std::bind (&Editor::parameter_changed, this, _1), gui_context());
@@ -4720,6 +4725,10 @@ Editor::initial_display ()
 	StripableList s;
 	_session->get_stripables (s);
 	add_stripables (s);
+
+	for (auto const& folder : _session->track_folders ()->list ()) {
+		add_folder (folder);
+	}
 }
 
 void
@@ -4848,6 +4857,60 @@ Editor::add_stripables (StripableList& sl)
 	if (show_editor_mixer_when_tracks_arrive && !new_selection.empty()) {
 		show_editor_mixer (true);
 	}
+}
+
+void
+Editor::add_folder (std::shared_ptr<ARDOUR::TrackFolder> folder)
+{
+	FolderTimeAxisView* ftv = new FolderTimeAxisView (*this, _session, *_track_canvas, folder);
+	track_views.push_back (ftv);
+	queue_redisplay_track_views ();
+}
+
+void
+Editor::remove_folder (std::shared_ptr<ARDOUR::TrackFolder> folder)
+{
+	for (TrackViewList::iterator i = track_views.begin(); i != track_views.end(); ++i) {
+		FolderTimeAxisView* ftv = dynamic_cast<FolderTimeAxisView*> (*i);
+		if (ftv && ftv->folder () == folder) {
+			track_views.erase (i);
+			delete ftv;
+			break;
+		}
+	}
+	queue_redisplay_track_views ();
+}
+
+void
+Editor::rebuild_folded_route_map ()
+{
+	_folded_route_folder_map.clear ();
+
+	for (auto & tv : track_views) {
+		FolderTimeAxisView* ftv = dynamic_cast<FolderTimeAxisView*> (tv);
+		if (!ftv || !ftv->folder ()->collapsed ()) {
+			continue;
+		}
+		for (auto const& r : ftv->folder ()->route_list ()) {
+			_folded_route_folder_map[r->id ()] = ftv->folder ();
+		}
+	}
+}
+
+bool
+Editor::folded_under_collapsed_folder (TimeAxisView* tv) const
+{
+	std::shared_ptr<ARDOUR::Stripable> s = tv->stripable ();
+
+	if (!s) {
+		/* not Stripable-backed (e.g. a FolderTimeAxisView itself): a
+		 * collapsed folder's own header must remain visible so it can be
+		 * expanded again.
+		 */
+		return false;
+	}
+
+	return _folded_route_folder_map.find (s->id ()) != _folded_route_folder_map.end ();
 }
 
 void
@@ -5037,14 +5100,37 @@ Editor::show_track_in_display (TimeAxisView* tv, bool move_into_view)
 
 struct TrackViewStripableSorter
 {
+  std::shared_ptr<ARDOUR::Stripable> sort_key (const TimeAxisView* tav) const
+  {
+    if (FolderTimeAxisView const* ftav = dynamic_cast<FolderTimeAxisView const*> (tav)) {
+      return ftav->anchor_route ();
+    }
+    StripableTimeAxisView const* stav = dynamic_cast<StripableTimeAxisView const*> (tav);
+    assert (stav);
+    return stav->stripable ();
+  }
+
   bool operator() (const TimeAxisView* tav_a, const TimeAxisView *tav_b)
   {
-    StripableTimeAxisView const* stav_a = dynamic_cast<StripableTimeAxisView const*>(tav_a);
-    StripableTimeAxisView const* stav_b = dynamic_cast<StripableTimeAxisView const*>(tav_b);
-    assert (stav_a && stav_b);
+    std::shared_ptr<ARDOUR::Stripable> a = sort_key (tav_a);
+    std::shared_ptr<ARDOUR::Stripable> b = sort_key (tav_b);
 
-    std::shared_ptr<ARDOUR::Stripable> const& a = stav_a->stripable ();
-    std::shared_ptr<ARDOUR::Stripable> const& b = stav_b->stripable ();
+    if (!a && !b) {
+      return tav_a < tav_b; /* stable, arbitrary but consistent ordering for two empty folders */
+    }
+    if (!a) {
+      return true; /* empty folder sorts first */
+    }
+    if (!b) {
+      return false;
+    }
+    if (a == b) {
+      /* tav_a is the FolderTimeAxisView anchored on the same route that
+       * tav_b (or vice versa) actually *is* -- the folder header must sort
+       * immediately before its anchor route.
+       */
+      return dynamic_cast<FolderTimeAxisView const*> (tav_a) != 0;
+    }
     return ARDOUR::Stripable::Sorter () (a, b);
   }
 };
@@ -5117,6 +5203,8 @@ Editor::redisplay_track_views ()
 		maybe_move_tracks ();
 	}
 
+	rebuild_folded_route_map ();
+
 	/* n will be the count of tracks plus children (updated by TimeAxisView::show_at),
 	 * so we will use that to know where to put things.
 	 */
@@ -5125,7 +5213,14 @@ Editor::redisplay_track_views ()
 
 	for (auto & tv : track_views) {
 
-		if (tv->marked_for_display ()) {
+		if (folded_under_collapsed_folder (tv)) {
+			/* hidden because a collapsed TrackFolder contains this route;
+			 * this is deliberately independent of PresentationInfo::Hidden,
+			 * which is shared with the Mixer/OSC/Mackie and must not be
+			 * touched by folder collapse (Editor-only feature).
+			 */
+			tv->hide ();
+		} else if (tv->marked_for_display ()) {
 			position += tv->show_at (position, n, &edit_controls_vbox);
 		} else {
 			tv->hide ();

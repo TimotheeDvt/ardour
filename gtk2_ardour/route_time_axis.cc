@@ -679,6 +679,10 @@ RouteTimeAxisView::build_display_menu ()
 
 		items.push_back (MenuElem (_("Outputs..."), sigc::mem_fun (*this, &RouteUI::edit_output_configuration)));
 
+		if (_editor.get_selection().tracks.size() > 1) {
+			items.push_back (MenuElem (_("Create Folder from Selection"), sigc::mem_fun (_editor, &PublicEditor::create_folder_from_selection)));
+		}
+
 		items.push_back (SeparatorElem());
 
 		build_size_menu ();
