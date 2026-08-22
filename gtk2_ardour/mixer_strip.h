@@ -73,6 +73,7 @@ namespace ARDOUR {
 	class Bundle;
 	class Plugin;
 	class TriggerBox;
+	class TrackFolder;
 }
 namespace Gtk {
 	class Window;
@@ -112,6 +113,9 @@ public:
 	void set_embedded (bool);
 
 	void set_route (std::shared_ptr<ARDOUR::Route>);
+
+	void set_folder (std::shared_ptr<ARDOUR::TrackFolder>);
+	std::shared_ptr<ARDOUR::TrackFolder> folder () const { return _folder; }
 	void set_button_names ();
 	void show_send (std::shared_ptr<ARDOUR::Send>);
 	void revert_to_default_display ();
@@ -184,6 +188,15 @@ private:
 	ArdourWidgets::ArdourButton number_label;
 	Gtk::HBox                   width_hide_box;
 	Gtk::EventBox               spacer;
+
+	std::shared_ptr<ARDOUR::TrackFolder> _folder;
+	ArdourWidgets::ArdourButton*         _folder_collapse_button;
+	PBD::ScopedConnectionList             _folder_connections;
+
+	void check_folder_bus ();
+	bool folder_collapse_button_release (GdkEventButton*);
+	void folder_property_changed (PBD::PropertyChange const&);
+	void update_folder_collapse_button ();
 
 	void hide_clicked();
 	bool width_button_pressed (GdkEventButton *);

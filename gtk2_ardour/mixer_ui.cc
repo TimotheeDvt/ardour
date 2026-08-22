@@ -58,6 +58,8 @@
 #include "ardour/selection.h"
 #include "ardour/session.h"
 #include "ardour/template_utils.h"
+#include "ardour/track_folder.h"
+#include "ardour/track_folder_list.h"
 #include "ardour/utils.h"
 #include "ardour/vca.h"
 #include "ardour/vca_manager.h"
@@ -87,6 +89,7 @@
 #include "actions.h"
 #include "gui_thread.h"
 #include "ardour_message.h"
+#include "mixer_folder_tabs.h"
 #include "mixer_group_tabs.h"
 #include "plugin_utils.h"
 #include "route_sorter.h"
@@ -198,9 +201,11 @@ Mixer_UI::Mixer_UI ()
 #endif
 
 	_group_tabs = new MixerGroupTabs (this);
+	_folder_tabs = new MixerFolderTabs (this);
 	strip_group_box.set_spacing (0);
 	strip_group_box.set_border_width (0);
 	strip_group_box.pack_start (*_group_tabs, PACK_SHRINK);
+	strip_group_box.pack_start (*_folder_tabs, PACK_SHRINK);
 	strip_group_box.pack_start (strip_packer);
 	strip_group_box.show_all ();
 	strip_group_box.signal_scroll_event().connect (sigc::mem_fun (*this, &Mixer_UI::on_scroll_event), false);
@@ -484,6 +489,7 @@ Mixer_UI::~Mixer_UI ()
 	delete _plugin_selector;
 	delete track_menu;
 	delete _group_tabs;
+	delete _folder_tabs;
 	delete _mixer_scene_release;
 }
 
@@ -1320,6 +1326,7 @@ Mixer_UI::set_session (Session* sess)
 	if (sess) {
 		_monitor_section.set_session (sess);
 		_group_tabs->set_session (sess);
+		_folder_tabs->set_session (sess);
 		_application_bar.set_session (_session);
 		if (_plugin_selector) {
 			_plugin_selector->set_session (_session);
@@ -1364,6 +1371,8 @@ Mixer_UI::set_session (Session* sess)
 	initial_track_display ();
 
 	_session->RouteAdded.connect (_session_connections, invalidator (*this), std::bind (&Mixer_UI::add_routes, this, _1), gui_context());
+	_session->track_folders ()->TrackFolderAdded.connect (_session_connections, invalidator (*this), std::bind (&Mixer_UI::add_folder, this, _1), gui_context());
+	_session->track_folders ()->TrackFolderRemoved.connect (_session_connections, invalidator (*this), std::bind (&Mixer_UI::remove_folder, this, _1), gui_context());
 	_session->route_group_added.connect (_session_connections, invalidator (*this), std::bind (&Mixer_UI::add_route_group, this, _1), gui_context());
 	_session->route_group_removed.connect (_session_connections, invalidator (*this), std::bind (&Mixer_UI::route_groups_changed, this), gui_context());
 	_session->route_groups_reordered.connect (_session_connections, invalidator (*this), std::bind (&Mixer_UI::route_groups_changed, this), gui_context());
@@ -1814,6 +1823,8 @@ Mixer_UI::redisplay_track_list ()
 		}
 	}
 
+	rebuild_folded_route_map ();
+
 	TreeModel::Children rows = track_model->children();
 	TreeModel::Children::iterator i;
 	uint32_t n_masters = 0;
@@ -1830,13 +1841,20 @@ Mixer_UI::redisplay_track_list ()
 	for (i = rows.begin(); i != rows.end(); ++i) {
 
 		AxisView* s = (*i)[stripable_columns.strip];
-		bool const visible = (*i)[stripable_columns.visible];
+		bool const model_visible = (*i)[stripable_columns.visible];
 		std::shared_ptr<Stripable> stripable = (*i)[stripable_columns.stripable];
 
 		if (!s) {
 			/* we're in the middle of changing a row, don't worry */
 			continue;
 		}
+
+		/* folded_under_collapsed_folder() gates display without touching
+		 * PresentationInfo::Hidden (the 'visible' column above) -- that bit
+		 * is shared with the Editor/OSC/control surfaces and must not be
+		 * flipped just because a folder happens to be collapsed right now.
+		 */
+		bool const visible = model_visible && !folded_under_collapsed_folder (stripable);
 
 		VCAMasterStrip* vms;
 
@@ -1863,12 +1881,14 @@ Mixer_UI::redisplay_track_list ()
 				strip_packer.pack_start (*strip, false, false);
 				strip->set_packed (true);
 			}
+			strip->show ();
 
 		} else {
 
 			if (stripable->is_singleton()) {
 				/* do nothing, these cannot be hidden */
 			} else {
+				strip->hide ();
 				if (strip->packed()) {
 					strip_packer.remove (*strip);
 					strip->set_packed (false);
@@ -1902,6 +1922,7 @@ Mixer_UI::redisplay_track_list ()
 	}
 
 	_group_tabs->set_dirty ();
+	_folder_tabs->queue_draw ();
 
 	if (_spill_scroll_position > 0 && scroller.get_hscrollbar()) {
 		Adjustment* adj = scroller.get_hscrollbar()->get_adjustment();
@@ -1912,6 +1933,89 @@ Mixer_UI::redisplay_track_list ()
 	if (_surround_strip) {
 		out_packer.reorder_child (*_surround_strip, -1);
 	}
+}
+
+void
+Mixer_UI::add_folder (std::shared_ptr<ARDOUR::TrackFolder> folder)
+{
+	folder->PropertyChanged.connect (_session_connections, invalidator (*this), std::bind (&Mixer_UI::folder_bus_changed, this, std::weak_ptr<ARDOUR::TrackFolder> (folder)), gui_context ());
+	folder->BusChanged.connect (_session_connections, invalidator (*this), std::bind (&Mixer_UI::folder_bus_changed, this, std::weak_ptr<ARDOUR::TrackFolder> (folder)), gui_context ());
+	folder->RouteAdded.connect (_session_connections, invalidator (*this), std::bind (&Mixer_UI::folder_bus_changed, this, std::weak_ptr<ARDOUR::TrackFolder> (folder)), gui_context ());
+	folder->RouteRemoved.connect (_session_connections, invalidator (*this), std::bind (&Mixer_UI::folder_bus_changed, this, std::weak_ptr<ARDOUR::TrackFolder> (folder)), gui_context ());
+
+	if (folder->has_bus ()) {
+		MixerStrip* ms = strip_by_route (folder->bus ());
+		if (ms) {
+			ms->set_folder (folder);
+		}
+	}
+
+	redisplay_track_list ();
+	_folder_tabs->queue_draw ();
+}
+
+void
+Mixer_UI::remove_folder (std::shared_ptr<ARDOUR::TrackFolder>)
+{
+	redisplay_track_list ();
+	_folder_tabs->queue_draw ();
+}
+
+void
+Mixer_UI::folder_bus_changed (std::weak_ptr<ARDOUR::TrackFolder> wf)
+{
+	/* Reused as the general "something about this folder changed" handler
+	 * (collapsed, membership, bus created/removed) -- covers the case
+	 * Editor::folder_bus_changed() exists for (Session::RouteAdded fires,
+	 * and thus the bus's MixerStrip is constructed, *before*
+	 * TrackFolder::make_bus() has assigned its bus pointer, so the strip
+	 * needs to be retroactively attached once BusChanged actually fires)
+	 * as well as simpler cases that just need a redisplay/redraw.
+	 */
+	std::shared_ptr<ARDOUR::TrackFolder> folder = wf.lock ();
+
+	if (!folder) {
+		return;
+	}
+
+	if (folder->has_bus ()) {
+		MixerStrip* ms = strip_by_route (folder->bus ());
+		if (ms) {
+			ms->set_folder (folder);
+		}
+	}
+
+	redisplay_track_list ();
+	_folder_tabs->queue_draw ();
+}
+
+void
+Mixer_UI::rebuild_folded_route_map ()
+{
+	_folded_route_folder_map.clear ();
+
+	if (!_session) {
+		return;
+	}
+
+	for (auto const& folder : _session->track_folders ()->list ()) {
+		if (!folder->collapsed ()) {
+			continue;
+		}
+		for (auto const& r : folder->route_list ()) {
+			_folded_route_folder_map[r->id ()] = folder;
+		}
+	}
+}
+
+bool
+Mixer_UI::folded_under_collapsed_folder (std::shared_ptr<ARDOUR::Stripable> s) const
+{
+	if (!s) {
+		return false;
+	}
+
+	return _folded_route_folder_map.find (s->id ()) != _folded_route_folder_map.end ();
 }
 
 void
@@ -1982,6 +2086,10 @@ Mixer_UI::initial_track_display ()
 	}
 
 	sync_treeview_from_presentation_info (Properties::order);
+
+	for (auto const& folder : _session->track_folders ()->list ()) {
+		add_folder (folder);
+	}
 }
 
 bool

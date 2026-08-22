@@ -39,6 +39,7 @@
 
 #include "pbd/convert.h"
 #include "pbd/enumwriter.h"
+#include "pbd/memento_command.h"
 #include "pbd/replace_all.h"
 #include "pbd/unwind.h"
 
@@ -61,6 +62,8 @@
 #include "ardour/send.h"
 #include "ardour/selection.h"
 #include "ardour/session.h"
+#include "ardour/track_folder.h"
+#include "ardour/track_folder_list.h"
 #include "ardour/types.h"
 #include "ardour/user_bundle.h"
 #include "ardour/vca.h"
@@ -189,6 +192,7 @@ MixerStrip::init ()
 	group_menu = 0;
 	route_ops_menu = 0;
 	_width_owner = 0;
+	_folder_collapse_button = 0;
 
 	_tmaster = new TriggerMaster (_tmaster_widget.root ());
 
@@ -777,6 +781,96 @@ MixerStrip::set_route (std::shared_ptr<Route> rt)
 
 	show ();
 	update_sensitivity ();
+
+	check_folder_bus ();
+}
+
+void
+MixerStrip::check_folder_bus ()
+{
+	if (!_session || !_route) {
+		return;
+	}
+
+	std::shared_ptr<TrackFolder> f = _session->track_folders ()->folder_for_bus (_route);
+
+	if (f) {
+		set_folder (f);
+	}
+}
+
+void
+MixerStrip::set_folder (std::shared_ptr<TrackFolder> f)
+{
+	if (_folder == f) {
+		return;
+	}
+
+	_folder_connections.drop_connections ();
+	_folder = f;
+
+	if (!_folder) {
+		if (_folder_collapse_button) {
+			_folder_collapse_button->hide ();
+		}
+		return;
+	}
+
+	if (!_folder_collapse_button) {
+		_folder_collapse_button = manage (new ArdourButton ());
+		_folder_collapse_button->set_name ("mixer strip button");
+		_folder_collapse_button->set_can_focus (false);
+		_folder_collapse_button->signal_button_release_event ().connect (sigc::mem_fun (*this, &MixerStrip::folder_collapse_button_release), false);
+
+		width_hide_box.pack_start (*_folder_collapse_button, false, true);
+		width_hide_box.reorder_child (*_folder_collapse_button, 0);
+	}
+
+	_folder_collapse_button->show ();
+
+	_folder->PropertyChanged.connect (_folder_connections, invalidator (*this), std::bind (&MixerStrip::folder_property_changed, this, _1), gui_context ());
+
+	update_folder_collapse_button ();
+}
+
+bool
+MixerStrip::folder_collapse_button_release (GdkEventButton*)
+{
+	if (!_folder) {
+		return true;
+	}
+
+	XMLNode& before (_folder->get_state ());
+	_folder->set_collapsed (!_folder->collapsed ());
+	XMLNode& after (_folder->get_state ());
+
+	_session->begin_reversible_command (_folder->collapsed () ? _("Collapse Folder") : _("Expand Folder"));
+	_session->commit_reversible_command (new MementoCommand<TrackFolder> (*_folder, &before, &after));
+
+	return true;
+}
+
+void
+MixerStrip::folder_property_changed (PBD::PropertyChange const& what_changed)
+{
+	if (!_folder) {
+		return;
+	}
+
+	if (what_changed.contains (ARDOUR::Properties::folder_collapsed)) {
+		update_folder_collapse_button ();
+	}
+}
+
+void
+MixerStrip::update_folder_collapse_button ()
+{
+	if (!_folder_collapse_button || !_folder) {
+		return;
+	}
+
+	_folder_collapse_button->set_text (_folder->collapsed () ? S_("Folder|>") : S_("Folder|v"));
+	set_tooltip (*_folder_collapse_button, string_compose (_("Collapse/expand this folder (%1)"), string_compose (P_("%1 track", "%1 tracks", _folder->size ()), _folder->size ())));
 }
 
 void

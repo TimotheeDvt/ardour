@@ -25,6 +25,7 @@
 #pragma once
 
 #include <list>
+#include <map>
 
 #include <ytkmm/box.h>
 #include <ytkmm/scrolledwindow.h>
@@ -66,6 +67,7 @@
 namespace ARDOUR {
 	class Route;
 	class RouteGroup;
+	class TrackFolder;
 	class VCA;
 };
 
@@ -74,6 +76,7 @@ class FoldbackStrip;
 class MixerStrip;
 class PluginSelector;
 class MixerGroupTabs;
+class MixerFolderTabs;
 class MonitorSection;
 class SurroundStrip;
 class VCAMasterStrip;
@@ -249,6 +252,7 @@ private:
 	bool scene_label_press (GdkEventButton* ev, int);
 
 	MixerGroupTabs* _group_tabs;
+	MixerFolderTabs* _folder_tabs;
 
 	bool on_scroll_event (GdkEventScroll*);
 	bool on_vca_scroll_event (GdkEventScroll*);
@@ -297,6 +301,14 @@ private:
 	void track_name_changed (MixerStrip *);
 
 	void redisplay_track_list ();
+
+	void add_folder (std::shared_ptr<ARDOUR::TrackFolder>);
+	void remove_folder (std::shared_ptr<ARDOUR::TrackFolder>);
+	void folder_bus_changed (std::weak_ptr<ARDOUR::TrackFolder>);
+	void rebuild_folded_route_map ();
+	bool folded_under_collapsed_folder (std::shared_ptr<ARDOUR::Stripable>) const;
+	std::map<PBD::ID, std::shared_ptr<ARDOUR::TrackFolder> > _folded_route_folder_map;
+
 	void spill_redisplay (std::shared_ptr<ARDOUR::Stripable>);
 	bool no_track_list_redisplay;
 	bool track_display_button_press (GdkEventButton*);
@@ -480,6 +492,7 @@ private:
 	MixerStrip* strip_by_x (int x);
 
 	friend class MixerGroupTabs;
+	friend class MixerFolderTabs;
 
 	void monitor_section_going_away ();
 	void monitor_section_attached ();
