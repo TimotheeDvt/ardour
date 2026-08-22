@@ -55,6 +55,9 @@ public:
 	bool collapsed () const { return _collapsed.val (); }
 	void set_collapsed (bool yn);
 
+	uint32_t color () const { return _color.val (); }
+	void set_color (uint32_t rgba);
+
 	/** Add a route to the folder.  Adding a route already present is a no-op. */
 	int add_route (std::shared_ptr<Route>);
 	int remove_route (std::shared_ptr<Route>);
@@ -84,8 +87,9 @@ protected:
 	friend class Session;
 
 private:
-	RouteVector          _routes;
-	PBD::Property<bool>  _collapsed;
+	RouteVector             _routes;
+	PBD::Property<bool>     _collapsed;
+	PBD::Property<uint32_t> _color;
 
 	void remove_when_going_away (std::weak_ptr<Route>);
 };

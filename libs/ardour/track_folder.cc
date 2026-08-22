@@ -22,6 +22,7 @@
 #include "pbd/strsplit.h"
 #include "pbd/types_convert.h"
 
+#include "ardour/presentation_info.h"
 #include "ardour/route.h"
 #include "ardour/session.h"
 #include "ardour/stripable.h"
@@ -48,9 +49,11 @@ TrackFolder::make_property_quarks ()
 TrackFolder::TrackFolder (Session& s, const string& n)
 	: SessionObject (s, n)
 	, _collapsed (Properties::folder_collapsed, false)
+	, _color (Properties::color, 0x707070ff)
 {
 	_xml_node_name = X_("TrackFolder");
 	add_property (_collapsed);
+	add_property (_color);
 }
 
 TrackFolder::~TrackFolder ()
@@ -141,6 +144,18 @@ TrackFolder::set_collapsed (bool yn)
 
 	_collapsed = yn;
 	send_change (PropertyChange (Properties::folder_collapsed));
+	_session.set_dirty ();
+}
+
+void
+TrackFolder::set_color (uint32_t rgba)
+{
+	if (color () == rgba) {
+		return;
+	}
+
+	_color = rgba;
+	send_change (PropertyChange (Properties::color));
 	_session.set_dirty ();
 }
 

@@ -69,13 +69,14 @@ protected:
 private:
 	std::shared_ptr<ARDOUR::TrackFolder> _folder;
 	ArdourWidgets::ArdourButton          _collapse_button;
-	ArdourWidgets::ArdourButton          _member_count_button;
 	PBD::ScopedConnectionList             _folder_connections;
 
 	bool collapse_button_release (GdkEventButton*);
 	void folder_property_changed (PBD::PropertyChange const&);
 	void folder_membership_changed (std::shared_ptr<ARDOUR::TrackFolder>, std::weak_ptr<ARDOUR::Route>);
 	void update_collapse_button ();
-	void update_member_count ();
+	void update_member_count_tooltip ();
+	void update_color ();
 	void ungroup ();
+	void choose_color ();
 };
