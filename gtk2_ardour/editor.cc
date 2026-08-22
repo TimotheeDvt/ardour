@@ -66,6 +66,7 @@
 #include <ytkmm/menuitem.h>
 
 #include "gtkmm2ext/bindings.h"
+#include "gtkmm2ext/doi.h"
 #include "gtkmm2ext/gtk_ui.h"
 #include "gtkmm2ext/keyboard.h"
 #include "gtkmm2ext/utils.h"
@@ -4874,7 +4875,8 @@ Editor::remove_folder (std::shared_ptr<ARDOUR::TrackFolder> folder)
 		FolderTimeAxisView* ftv = dynamic_cast<FolderTimeAxisView*> (*i);
 		if (ftv && ftv->folder () == folder) {
 			track_views.erase (i);
-			delete ftv;
+			ftv->hide ();
+			delete_when_idle (ftv);
 			break;
 		}
 	}

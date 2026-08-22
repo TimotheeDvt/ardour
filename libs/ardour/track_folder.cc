@@ -55,7 +55,7 @@ TrackFolder::TrackFolder (Session& s, const string& n)
 
 TrackFolder::~TrackFolder ()
 {
-	clear ();
+	_routes.clear ();
 }
 
 int
