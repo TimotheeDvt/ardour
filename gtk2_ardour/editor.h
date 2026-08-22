@@ -767,6 +767,7 @@ private:
 
 	void add_folder (std::shared_ptr<ARDOUR::TrackFolder>);
 	void remove_folder (std::shared_ptr<ARDOUR::TrackFolder>);
+	void folder_bus_changed (std::weak_ptr<ARDOUR::TrackFolder>);
 	void rebuild_folded_route_map ();
 	bool folded_under_collapsed_folder (TimeAxisView*) const;
 	std::map<PBD::ID, std::shared_ptr<ARDOUR::TrackFolder> > _folded_route_folder_map;

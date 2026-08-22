@@ -4863,8 +4863,62 @@ Editor::add_stripables (StripableList& sl)
 void
 Editor::add_folder (std::shared_ptr<ARDOUR::TrackFolder> folder)
 {
-	FolderTimeAxisView* ftv = new FolderTimeAxisView (*this, _session, *_track_canvas, folder);
-	track_views.push_back (ftv);
+	if (!folder->has_bus ()) {
+		FolderTimeAxisView* ftv = new FolderTimeAxisView (*this, _session, *_track_canvas, folder);
+		track_views.push_back (ftv);
+	}
+
+	folder->BusChanged.connect (_session_connections, invalidator (*this), std::bind (&Editor::folder_bus_changed, this, std::weak_ptr<ARDOUR::TrackFolder> (folder)), gui_context ());
+
+	queue_redisplay_track_views ();
+}
+
+void
+Editor::folder_bus_changed (std::weak_ptr<ARDOUR::TrackFolder> wf)
+{
+	std::shared_ptr<ARDOUR::TrackFolder> folder = wf.lock ();
+
+	if (!folder) {
+		return;
+	}
+
+	/* Drop any existing FolderTimeAxisView row for this folder -- there
+	 * should be one iff it does NOT currently have a bus.
+	 */
+	for (TrackViewList::iterator i = track_views.begin (); i != track_views.end (); ++i) {
+		FolderTimeAxisView* ftv = dynamic_cast<FolderTimeAxisView*> (*i);
+		if (ftv && ftv->folder () == folder) {
+			track_views.erase (i);
+			ftv->hide ();
+			delete_when_idle (ftv);
+			break;
+		}
+	}
+
+	if (folder->has_bus ()) {
+		/* Retroactively attach the collapse control to the bus's own row.
+		 * That row already exists by now: route creation (and thus this
+		 * RouteTimeAxisView) completes synchronously inside
+		 * Session::new_audio_route()/new_midi_route(), which is called
+		 * from inside TrackFolder::make_bus() *before* make_bus() assigns
+		 * _bus and emits BusChanged.
+		 */
+		for (auto & tv : track_views) {
+			RouteTimeAxisView* rtv = dynamic_cast<RouteTimeAxisView*> (tv);
+			if (rtv && rtv->route () == folder->bus ()) {
+				rtv->set_folder (folder);
+				break;
+			}
+		}
+	} else {
+		/* No more bus (removed, or its route was deleted some other way):
+		 * the synthetic header row takes back over as this folder's
+		 * identity.
+		 */
+		FolderTimeAxisView* ftv = new FolderTimeAxisView (*this, _session, *_track_canvas, folder);
+		track_views.push_back (ftv);
+	}
+
 	queue_redisplay_track_views ();
 }
 
@@ -4888,13 +4942,22 @@ Editor::rebuild_folded_route_map ()
 {
 	_folded_route_folder_map.clear ();
 
-	for (auto & tv : track_views) {
-		FolderTimeAxisView* ftv = dynamic_cast<FolderTimeAxisView*> (tv);
-		if (!ftv || !ftv->folder ()->collapsed ()) {
+	if (!_session) {
+		return;
+	}
+
+	/* Iterate TrackFolders directly rather than looking for
+	 * FolderTimeAxisView rows in track_views: a merged folder (one with a
+	 * bus; see TrackFolder::make_bus()) has no FolderTimeAxisView row at
+	 * all, since its collapse control lives on the bus's own
+	 * RouteTimeAxisView instead. This works for both cases uniformly.
+	 */
+	for (auto const& folder : _session->track_folders ()->list ()) {
+		if (!folder->collapsed ()) {
 			continue;
 		}
-		for (auto const& r : ftv->folder ()->route_list ()) {
-			_folded_route_folder_map[r->id ()] = ftv->folder ();
+		for (auto const& r : folder->route_list ()) {
+			_folded_route_folder_map[r->id ()] = folder;
 		}
 	}
 }

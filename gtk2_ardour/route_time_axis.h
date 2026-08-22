@@ -55,6 +55,7 @@ namespace ARDOUR {
 	class Processor;
 	class Location;
 	class Playlist;
+	class TrackFolder;
 }
 
 namespace ArdourCanvas {
@@ -87,6 +88,8 @@ public:
 	std::shared_ptr<ARDOUR::Stripable> stripable() const { return RouteUI::stripable(); }
 
 	void set_route (std::shared_ptr<ARDOUR::Route>);
+	void set_folder (std::shared_ptr<ARDOUR::TrackFolder>);
+	std::shared_ptr<ARDOUR::TrackFolder> folder () const { return _folder; }
 
 	void show_selection (TimeSelection&);
 	void set_button_names ();
@@ -309,5 +312,16 @@ private:
 
 	PBD::ScopedConnection ctrl_touched_connection;
 	sigc::connection      ctrl_autohide_connection;
+
+	void check_folder_bus ();
+	bool folder_collapse_button_release (GdkEventButton*);
+	void folder_property_changed (PBD::PropertyChange const&);
+	void update_folder_collapse_button ();
+	void folder_menu_toggle_collapsed ();
+	void folder_menu_remove_bus ();
+
+	std::shared_ptr<ARDOUR::TrackFolder> _folder;
+	ArdourWidgets::ArdourButton*         _folder_collapse_button;
+	PBD::ScopedConnectionList            _folder_connections;
 };
 

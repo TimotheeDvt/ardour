@@ -59,6 +59,7 @@ public:
 	void remove (std::shared_ptr<TrackFolder>);
 
 	std::shared_ptr<TrackFolder> folder_for_route (std::shared_ptr<Route>) const;
+	std::shared_ptr<TrackFolder> folder_for_bus (std::shared_ptr<Route>) const;
 	std::shared_ptr<TrackFolder> folder_by_name (std::string) const;
 
 	XMLNode& get_state () const;

@@ -44,6 +44,7 @@
 #include "pbd/error.h"
 #include "pbd/whitespace.h"
 #include "pbd/enumwriter.h"
+#include "pbd/memento_command.h"
 #include "pbd/stateful_diff_command.h"
 
 #include "evoral/Parameter.h"
@@ -61,6 +62,8 @@
 #include "ardour/session.h"
 #include "ardour/surround_send.h"
 #include "ardour/track.h"
+#include "ardour/track_folder.h"
+#include "ardour/track_folder_list.h"
 
 #include "canvas/debug.h"
 
@@ -122,6 +125,7 @@ RouteTimeAxisView::RouteTimeAxisView (PublicEditor& ed, Session* sess, ArdourCan
 	, gm (sess, true, 75, 14)
 	, _ignore_set_layer_display (false)
 	, pan_automation_item(NULL)
+	, _folder_collapse_button (0)
 {
 	subplugin_menu.set_name ("ArdourContextMenu");
 	number_label.set_name("tracknumber label");
@@ -332,6 +336,8 @@ RouteTimeAxisView::set_route (std::shared_ptr<Route> rt)
 	route_group_menu = new RouteGroupMenu (_session, plist);
 
 	gm.get_level_meter().signal_scroll_event().connect (sigc::mem_fun (*this, &RouteTimeAxisView::controls_ebox_scroll), false);
+
+	check_folder_bus ();
 }
 
 RouteTimeAxisView::~RouteTimeAxisView ()
@@ -357,6 +363,110 @@ RouteTimeAxisView::name() const
 		return _route->name();
 	}
 	return string();
+}
+
+void
+RouteTimeAxisView::check_folder_bus ()
+{
+	if (!_session || !_route) {
+		return;
+	}
+
+	std::shared_ptr<TrackFolder> f = _session->track_folders ()->folder_for_bus (_route);
+
+	if (f) {
+		set_folder (f);
+	}
+}
+
+void
+RouteTimeAxisView::set_folder (std::shared_ptr<TrackFolder> f)
+{
+	if (_folder == f) {
+		return;
+	}
+
+	_folder_connections.drop_connections ();
+	_folder = f;
+
+	if (!_folder) {
+		if (_folder_collapse_button) {
+			_folder_collapse_button->hide ();
+		}
+		return;
+	}
+
+	if (!_folder_collapse_button) {
+		_folder_collapse_button = manage (new ArdourButton ());
+		_folder_collapse_button->set_name ("route button");
+		_folder_collapse_button->set_can_focus (false);
+		_folder_collapse_button->set_tweaks (ArdourButton::TrackHeader);
+		_folder_collapse_button->signal_button_release_event ().connect (sigc::mem_fun (*this, &RouteTimeAxisView::folder_collapse_button_release), false);
+
+		top_hbox.pack_start (*_folder_collapse_button, false, false);
+		top_hbox.reorder_child (*_folder_collapse_button, 0);
+	}
+
+	_folder_collapse_button->show ();
+
+	_folder->PropertyChanged.connect (_folder_connections, invalidator (*this), std::bind (&RouteTimeAxisView::folder_property_changed, this, _1), gui_context ());
+
+	update_folder_collapse_button ();
+}
+
+bool
+RouteTimeAxisView::folder_collapse_button_release (GdkEventButton*)
+{
+	if (!_folder) {
+		return true;
+	}
+
+	XMLNode& before (_folder->get_state ());
+	_folder->set_collapsed (!_folder->collapsed ());
+	XMLNode& after (_folder->get_state ());
+
+	_session->begin_reversible_command (_folder->collapsed () ? _("Collapse Folder") : _("Expand Folder"));
+	_session->commit_reversible_command (new MementoCommand<TrackFolder> (*_folder, &before, &after));
+
+	return true;
+}
+
+void
+RouteTimeAxisView::folder_property_changed (PBD::PropertyChange const& what_changed)
+{
+	if (!_folder) {
+		return;
+	}
+
+	if (what_changed.contains (ARDOUR::Properties::folder_collapsed)) {
+		update_folder_collapse_button ();
+		_editor.queue_redisplay_track_views ();
+	}
+}
+
+void
+RouteTimeAxisView::update_folder_collapse_button ()
+{
+	if (!_folder_collapse_button || !_folder) {
+		return;
+	}
+
+	_folder_collapse_button->set_text (_folder->collapsed () ? S_("Folder|>") : S_("Folder|v"));
+	set_tooltip (*_folder_collapse_button, string_compose (_("Collapse/expand this folder (%1)"), string_compose (P_("%1 track", "%1 tracks", _folder->size ()), _folder->size ())));
+}
+
+void
+RouteTimeAxisView::folder_menu_toggle_collapsed ()
+{
+	folder_collapse_button_release (0);
+}
+
+void
+RouteTimeAxisView::folder_menu_remove_bus ()
+{
+	if (_folder) {
+		_folder->remove_bus ();
+	}
 }
 
 void
@@ -681,6 +791,11 @@ RouteTimeAxisView::build_display_menu ()
 
 		if (_editor.get_selection().tracks.size() > 1) {
 			items.push_back (MenuElem (_("Create Folder from Selection"), sigc::mem_fun (_editor, &PublicEditor::create_folder_from_selection)));
+		}
+
+		if (_folder) {
+			items.push_back (MenuElem (_folder->collapsed () ? _("Expand Folder") : _("Collapse Folder"), sigc::mem_fun (*this, &RouteTimeAxisView::folder_menu_toggle_collapsed)));
+			items.push_back (MenuElem (_("Remove Bus (keeps tracks, un-merges folder)"), sigc::mem_fun (*this, &RouteTimeAxisView::folder_menu_remove_bus)));
 		}
 
 		items.push_back (SeparatorElem());

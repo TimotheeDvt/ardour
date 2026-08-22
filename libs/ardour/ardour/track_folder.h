@@ -56,7 +56,15 @@ public:
 	bool collapsed () const { return _collapsed.val (); }
 	void set_collapsed (bool yn);
 
-	uint32_t color () const { return _color.val (); }
+	/** While has_bus(), name()/color() delegate to the bus (they are
+	 *  presented in the Editor as a single merged entity), and set_name()
+	 *  renames the bus. This keeps a single source of truth instead of two
+	 *  fields that could drift out of sync.
+	 */
+	std::string name () const;
+	bool set_name (const std::string& str);
+
+	uint32_t color () const;
 	void set_color (uint32_t rgba);
 
 	/** Add a route to the folder.  Adding a route already present is a no-op. */
@@ -81,6 +89,7 @@ public:
 	bool can_make_bus () const;
 	void make_bus ();
 	void remove_bus ();
+	PBD::Signal<void()> BusChanged;
 
 	/** Emitted when a route has been added to this folder */
 	PBD::Signal<void(std::shared_ptr<TrackFolder>, std::weak_ptr<ARDOUR::Route>)> RouteAdded;
@@ -102,6 +111,7 @@ private:
 	void remove_when_going_away (std::weak_ptr<Route>);
 	bool check_bus_compat (DataType&, uint32_t&) const;
 	void unset_bus ();
+	void reposition_bus_above_members ();
 };
 
 } /* namespace */

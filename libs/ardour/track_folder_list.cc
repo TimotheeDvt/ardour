@@ -95,6 +95,22 @@ TrackFolderList::folder_for_route (std::shared_ptr<Route> r) const
 }
 
 std::shared_ptr<TrackFolder>
+TrackFolderList::folder_for_bus (std::shared_ptr<Route> r) const
+{
+	if (!r) {
+		return std::shared_ptr<TrackFolder> ();
+	}
+
+	for (auto const& f : _folders) {
+		if (f->has_bus () && f->bus () == r) {
+			return f;
+		}
+	}
+
+	return std::shared_ptr<TrackFolder> ();
+}
+
+std::shared_ptr<TrackFolder>
 TrackFolderList::folder_by_name (string name) const
 {
 	for (auto const& f : _folders) {
