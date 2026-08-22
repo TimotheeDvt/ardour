@@ -142,6 +142,7 @@
 #include "ardour/template_utils.h"
 #include "ardour/tempo.h"
 #include "ardour/ticker.h"
+#include "ardour/track_folder_list.h"
 #include "ardour/transport_master_manager.h"
 #include "ardour/types_convert.h"
 #include "ardour/user_bundle.h"
@@ -2172,6 +2173,8 @@ Session::state (bool save_template, snapshot_t snapshot_type, bool for_archive, 
 		child->add_child_nocopy (rg->get_state());
 	}
 
+	node->add_child_nocopy (_track_folders->get_state());
+
 	node->add_child_nocopy (_speakers->get_state());
 	node->add_child_nocopy (TempoMap::fetch()->get_state());
 	node->add_child_nocopy (get_control_protocol_state());
@@ -2685,6 +2688,10 @@ Session::set_state (const XMLNode& node, int version)
 			error << _("Session: failed to load mix group information") << endmsg;
 			goto out;
 		}
+	}
+
+	if ((child = find_named_node (node, "TrackFolders")) != 0) {
+		_track_folders->set_state (*child, version);
 	}
 
 #if 0

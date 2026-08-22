@@ -185,6 +185,8 @@ class SessionPlaylists;
 class SoloMuteRelease;
 class Source;
 class Speakers;
+class TrackFolder;
+class TrackFolderList;
 class TransportMaster;
 struct TransportFSM;
 class Track;
@@ -774,6 +776,8 @@ public:
 	RouteGroupList const & route_groups () const {
 		return _route_groups;
 	}
+
+	TrackFolderList* track_folders () { return _track_folders; }
 
 	/* fundamental operations. duh. */
 
@@ -1727,6 +1731,7 @@ private:
 	void schedule_capture_buffering_adjustment ();
 
 	Locations*       _locations;
+	TrackFolderList* _track_folders;
 	void location_added (Location*);
 	void location_removed (Location*);
 	void locations_changed ();

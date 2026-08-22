@@ -128,6 +128,7 @@
 #include "ardour/surround_return.h"
 #include "ardour/tempo.h"
 #include "ardour/ticker.h"
+#include "ardour/track_folder_list.h"
 #include "ardour/transport_fsm.h"
 #include "ardour/transport_master.h"
 #include "ardour/transport_master_manager.h"
@@ -285,6 +286,7 @@ Session::Session (AudioEngine &eng,
 	, _butler (new Butler (*this))
 	, _transport_fsm (new TransportFSM (*this))
 	, _locations (new Locations (*this))
+	, _track_folders (new TrackFolderList (*this))
 	, _ignore_skips_updates (false)
 	, _rt_thread_active (false)
 	, _rt_emit_pending (false)
@@ -878,6 +880,7 @@ Session::destroy ()
 	delete _mmc; _mmc = 0;
 	delete _midi_ports; _midi_ports = 0;
 	delete _locations; _locations = 0;
+	delete _track_folders; _track_folders = 0;
 
 	delete midi_clock;
 

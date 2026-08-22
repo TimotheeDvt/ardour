@@ -130,6 +130,7 @@
 #include "ardour/session.h"
 #include "ardour/session_event.h"
 #include "ardour/source_factory.h"
+#include "ardour/track_folder.h"
 #include "ardour/transport_fsm.h"
 #include "ardour/transport_master_manager.h"
 #include "ardour/triggerbox.h"
@@ -654,6 +655,7 @@ ARDOUR::init (bool try_optimization, const char* localedir, bool with_gui)
 	Region::make_property_quarks ();
 	AudioRegion::make_property_quarks ();
 	RouteGroup::make_property_quarks ();
+	TrackFolder::make_property_quarks ();
 	Playlist::make_property_quarks ();
 	AudioPlaylist::make_property_quarks ();
 	PresentationInfo::make_property_quarks ();
