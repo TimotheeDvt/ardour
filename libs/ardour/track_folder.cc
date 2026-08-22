@@ -175,23 +175,23 @@ TrackFolder::reposition_bus_above_members ()
 	if (!_bus || !top) {
 		return;
 	}
+	PresentationInfo::ChangeSuspender cs;
+
+	PresentationInfo::order_t const target = top->presentation_info ().order ();
 
 	StripableList sl;
 	_session.get_stripables (sl);
 
-	std::vector<std::shared_ptr<Stripable> > ordered;
-	std::copy_if (sl.begin (), sl.end (), std::back_inserter (ordered), [this] (std::shared_ptr<Stripable> const& s) {
-		return s != _bus;
-	});
-	std::sort (ordered.begin (), ordered.end (), Stripable::Sorter ());
-
-	std::vector<std::shared_ptr<Stripable> >::iterator pos = std::find (ordered.begin (), ordered.end (), std::static_pointer_cast<Stripable> (top));
-	ordered.insert (pos, _bus);
-
-	PresentationInfo::order_t order = 0;
-	for (auto& s : ordered) {
-		s->set_presentation_order (order++);
+	for (auto const& s : sl) {
+		if (s == _bus) {
+			continue;
+		}
+		if (s->presentation_info ().order () >= target) {
+			s->set_presentation_order (s->presentation_info ().order () + 1);
+		}
 	}
+
+	_bus->set_presentation_order (target);
 }
 
 void
@@ -208,13 +208,6 @@ TrackFolder::remove_bus ()
 		 */
 	}
 
-	_session.remove_route (_bus);
-	_bus.reset ();
-
-	/* un-merge: the folder's own header (FolderTimeAxisView) takes back
-	 * over as its identity, reset to generic defaults rather than
-	 * inheriting whatever the bus happened to be called/colored.
-	 */
 	SessionObject::set_name (_("Folder"));
 	_color = 0x707070ff;
 
@@ -224,7 +217,8 @@ TrackFolder::remove_bus ()
 	send_change (change);
 
 	_session.set_dirty ();
-	BusChanged (); /* EMIT SIGNAL */
+
+	_session.remove_route (_bus);
 }
 
 void
@@ -272,8 +266,18 @@ TrackFolder::remove_when_going_away (std::weak_ptr<Route> wr)
 {
 	std::shared_ptr<Route> r (wr.lock ());
 
-	if (r) {
-		remove_route (r);
+	if (!r) {
+		return;
+	}
+
+	remove_route (r);
+
+	if (_routes.empty ()) {
+		if (_bus) {
+			/* a bus with no member tracks feeding it is useless */
+			remove_bus ();
+		}
+		Emptied (shared_from_this ()); /* EMIT SIGNAL */
 	}
 }
 

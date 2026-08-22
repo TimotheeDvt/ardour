@@ -60,6 +60,9 @@ TrackFolderList::add (std::shared_ptr<TrackFolder> f)
 	}
 
 	_folders.push_back (f);
+
+	f->Emptied.connect_same_thread (*this, std::bind (&TrackFolderList::remove, this, std::placeholders::_1));
+
 	_session.set_dirty ();
 	TrackFolderAdded (f); /* EMIT SIGNAL */
 }

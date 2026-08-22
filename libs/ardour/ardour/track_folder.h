@@ -95,6 +95,8 @@ public:
 	PBD::Signal<void(std::shared_ptr<TrackFolder>, std::weak_ptr<ARDOUR::Route>)> RouteAdded;
 	/** Emitted when a route has been removed from this folder */
 	PBD::Signal<void(std::shared_ptr<TrackFolder>, std::weak_ptr<ARDOUR::Route>)> RouteRemoved;
+	/** Emitted when the last member route is removed */
+	PBD::Signal<void(std::shared_ptr<TrackFolder>)> Emptied;
 
 	XMLNode& get_state () const;
 	int set_state (const XMLNode&, int version);
