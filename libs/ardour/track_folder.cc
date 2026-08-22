@@ -61,6 +61,134 @@ TrackFolder::~TrackFolder ()
 	_routes.clear ();
 }
 
+bool
+TrackFolder::check_bus_compat (DataType& dt, uint32_t& nin) const
+{
+	if (_routes.empty ()) {
+		return false;
+	}
+
+	bool midi_only = true;
+
+	for (auto const& r : _routes) {
+#ifdef MIXBUS
+		if (r->mixbus ()) {
+			return false;
+		}
+#endif
+		ChanCount cc (r->output ()->n_ports ());
+		if (cc.n_audio () > 0) {
+			midi_only = false;
+		}
+	}
+
+	dt  = midi_only ? DataType::MIDI : DataType::AUDIO;
+	nin = 0;
+
+	bool have_one = false;
+
+	for (auto const& r : _routes) {
+		ChanCount cc (r->output ()->n_ports ());
+		if (have_one && nin != cc.get (dt)) {
+			/* member routes must have matching channel counts: this is a
+			 * hard subgroup (direct 1:1 bundle connection), not an aux-send
+			 * subgroup, so there is no per-route gain stage to absorb a
+			 * mismatch.
+			 */
+			return false;
+		}
+		nin = max (nin, cc.get (dt));
+		have_one = true;
+	}
+
+	return have_one && nin > 0;
+}
+
+bool
+TrackFolder::can_make_bus () const
+{
+	if (_bus) {
+		return false;
+	}
+
+	DataType dt (DataType::NIL);
+	uint32_t nin;
+	return check_bus_compat (dt, nin);
+}
+
+void
+TrackFolder::make_bus ()
+{
+	DataType dt (DataType::NIL);
+	uint32_t nin;
+
+	if (_bus || !check_bus_compat (dt, nin)) {
+		return;
+	}
+
+	RouteList rl;
+
+	try {
+		if (dt == DataType::MIDI) {
+			rl = _session.new_midi_route (0, 1, string (), true, std::shared_ptr<PluginInfo> (), 0, PresentationInfo::MidiBus, PresentationInfo::max_order);
+		} else {
+			uint32_t nout = nin;
+			if (_session.master_out ()) {
+				nout = std::max (nout, _session.master_out ()->n_inputs ().n_audio ());
+			}
+			rl = _session.new_audio_route (nin, nout, 0, 1, string (), PresentationInfo::AudioBus, PresentationInfo::max_order);
+		}
+	} catch (...) {
+		return;
+	}
+
+	if (rl.empty ()) {
+		return;
+	}
+
+	_bus = rl.front ();
+	_bus->set_name (string_compose (_("%1 Bus"), name ()));
+	_bus->DropReferences.connect_same_thread (*this, std::bind (&TrackFolder::unset_bus, this));
+
+	std::shared_ptr<Bundle> bundle = _bus->input ()->bundle ();
+
+	for (auto const& r : _routes) {
+		r->output ()->disconnect ();
+		r->output ()->connect_ports_to_bundle (bundle, false, true);
+	}
+
+	_session.set_dirty ();
+}
+
+void
+TrackFolder::remove_bus ()
+{
+	if (!_bus) {
+		return;
+	}
+
+	for (auto const& r : _routes) {
+		r->output ()->disconnect ();
+		/* XXX find a new bundle to connect to, e.g. master -- same
+		 * limitation as RouteGroup::destroy_subgroup().
+		 */
+	}
+
+	_session.remove_route (_bus);
+	_bus.reset ();
+
+	_session.set_dirty ();
+}
+
+void
+TrackFolder::unset_bus ()
+{
+	if (_session.deletion_in_progress ()) {
+		return;
+	}
+	_bus.reset ();
+}
+
 int
 TrackFolder::add_route (std::shared_ptr<Route> r)
 {
@@ -177,6 +305,10 @@ TrackFolder::get_state () const
 		node->set_property ("routes", str.str ());
 	}
 
+	if (_bus) {
+		node->set_property ("bus", _bus->id ());
+	}
+
 	return *node;
 }
 
@@ -209,6 +341,16 @@ TrackFolder::set_state (const XMLNode& node, int version)
 			if (r) {
 				add_route (r);
 			}
+		}
+	}
+
+	_bus.reset ();
+	PBD::ID bus_id (0);
+	if (node.get_property ("bus", bus_id)) {
+		std::shared_ptr<Route> r = _session.route_by_id (bus_id);
+		if (r) {
+			_bus = r;
+			_bus->DropReferences.connect_same_thread (*this, std::bind (&TrackFolder::unset_bus, this));
 		}
 	}
 

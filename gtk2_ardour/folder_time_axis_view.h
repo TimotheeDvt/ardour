@@ -79,4 +79,6 @@ private:
 	void update_color ();
 	void ungroup ();
 	void choose_color ();
+	void make_bus ();
+	void remove_bus ();
 };

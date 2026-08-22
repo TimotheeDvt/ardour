@@ -33,6 +33,7 @@ namespace Properties {
 	LIBARDOUR_API extern PBD::PropertyDescriptor<bool> folder_collapsed;
 }
 
+class DataType;
 class Route;
 class Session;
 
@@ -75,6 +76,12 @@ public:
 	 */
 	std::shared_ptr<Route> topmost_route () const;
 
+	bool has_bus () const { return (bool) _bus; }
+	std::shared_ptr<Route> bus () const { return _bus; }
+	bool can_make_bus () const;
+	void make_bus ();
+	void remove_bus ();
+
 	/** Emitted when a route has been added to this folder */
 	PBD::Signal<void(std::shared_ptr<TrackFolder>, std::weak_ptr<ARDOUR::Route>)> RouteAdded;
 	/** Emitted when a route has been removed from this folder */
@@ -90,8 +97,11 @@ private:
 	RouteVector             _routes;
 	PBD::Property<bool>     _collapsed;
 	PBD::Property<uint32_t> _color;
+	std::shared_ptr<Route>  _bus;
 
 	void remove_when_going_away (std::weak_ptr<Route>);
+	bool check_bus_compat (DataType&, uint32_t&) const;
+	void unset_bus ();
 };
 
 } /* namespace */

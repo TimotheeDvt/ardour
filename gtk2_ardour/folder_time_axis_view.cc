@@ -244,6 +244,18 @@ FolderTimeAxisView::choose_color ()
 }
 
 void
+FolderTimeAxisView::make_bus ()
+{
+	_folder->make_bus ();
+}
+
+void
+FolderTimeAxisView::remove_bus ()
+{
+	_folder->remove_bus ();
+}
+
+void
 FolderTimeAxisView::ungroup ()
 {
 	std::shared_ptr<TrackFolder> folder = _folder;
@@ -268,6 +280,17 @@ FolderTimeAxisView::build_display_menu ()
 
 	items.push_back (MenuElem (_folder->collapsed () ? _("Expand Folder") : _("Collapse Folder"), sigc::mem_fun (*this, &FolderTimeAxisView::toggle_collapsed)));
 	items.push_back (MenuElem (_("Color..."), sigc::mem_fun (*this, &FolderTimeAxisView::choose_color)));
+	items.push_back (SeparatorElem ());
+
+	if (_folder->has_bus ()) {
+		items.push_back (MenuElem (_("Remove Bus"), sigc::mem_fun (*this, &FolderTimeAxisView::remove_bus)));
+	} else {
+		items.push_back (MenuElem (_("Make Bus (route tracks through a new submix bus)"), sigc::mem_fun (*this, &FolderTimeAxisView::make_bus)));
+		if (!_folder->can_make_bus ()) {
+			items.back ().set_sensitive (false);
+		}
+	}
+
 	items.push_back (SeparatorElem ());
 	items.push_back (MenuElem (_("Remove Folder (keeps tracks)"), sigc::mem_fun (*this, &FolderTimeAxisView::ungroup)));
 }
