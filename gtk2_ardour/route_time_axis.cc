@@ -464,9 +464,16 @@ RouteTimeAxisView::folder_menu_toggle_collapsed ()
 void
 RouteTimeAxisView::folder_menu_remove_bus ()
 {
-	if (_folder) {
-		_folder->remove_bus ();
+	if (!_folder) {
+		return;
 	}
+
+	XMLNode& before (_folder->get_state ());
+	_folder->remove_bus ();
+	XMLNode& after (_folder->get_state ());
+
+	_session->begin_reversible_command (_("Remove Folder Bus"));
+	_session->commit_reversible_command (new MementoCommand<TrackFolder> (*_folder, &before, &after));
 }
 
 void

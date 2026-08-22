@@ -246,13 +246,23 @@ FolderTimeAxisView::choose_color ()
 void
 FolderTimeAxisView::make_bus ()
 {
+	XMLNode& before (_folder->get_state ());
 	_folder->make_bus ();
+	XMLNode& after (_folder->get_state ());
+
+	_session->begin_reversible_command (_("Make Folder Bus"));
+	_session->commit_reversible_command (new MementoCommand<TrackFolder> (*_folder, &before, &after));
 }
 
 void
 FolderTimeAxisView::remove_bus ()
 {
+	XMLNode& before (_folder->get_state ());
 	_folder->remove_bus ();
+	XMLNode& after (_folder->get_state ());
+
+	_session->begin_reversible_command (_("Remove Folder Bus"));
+	_session->commit_reversible_command (new MementoCommand<TrackFolder> (*_folder, &before, &after));
 }
 
 void
