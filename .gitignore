@@ -154,7 +154,8 @@ waf3-*
 /local
 
 /bin
-/etc
+/etc/ardour9/*
+!etc/ardour9/ardour.keys
 /lib
 build.log
 

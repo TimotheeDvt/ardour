@@ -30,6 +30,7 @@
 
 /* Note: public Editor methods are documented in public_editor.h */
 
+#include <algorithm>
 #include <cstdlib>
 #include <cmath>
 #include <string>
@@ -120,6 +121,7 @@
 #include "pianoroll_window.h"
 #include "quantize_dialog.h"
 #include "region_gain_line.h"
+#include "folder_time_axis_view.h"
 #include "route_time_axis.h"
 #include "selection.h"
 #include "selection_templates.h"
@@ -8121,6 +8123,47 @@ Editor::create_folder_from_selection ()
 
 	begin_reversible_command (_("Create Folder"));
 	_session->add_command (new MementoCommand<TrackFolderList> (*(_session->track_folders ()), &before, &after));
+	commit_reversible_command ();
+}
+
+void
+Editor::toggle_selected_folder_collapsed ()
+{
+	TrackSelection& ts (selection->tracks);
+
+	if (ts.empty ()) {
+		return;
+	}
+
+	vector<std::shared_ptr<TrackFolder> > folders;
+
+	for (TrackSelection::iterator x = ts.begin (); x != ts.end (); ++x) {
+		std::shared_ptr<TrackFolder> folder;
+
+		if (FolderTimeAxisView* ftv = dynamic_cast<FolderTimeAxisView*> (*x)) {
+			folder = ftv->folder ();
+		} else if (RouteTimeAxisView* rtv = dynamic_cast<RouteTimeAxisView*> (*x)) {
+			folder = rtv->folder ();
+		}
+
+		if (folder && find (folders.begin (), folders.end (), folder) == folders.end ()) {
+			folders.push_back (folder);
+		}
+	}
+
+	if (folders.empty ()) {
+		return;
+	}
+
+	begin_reversible_command (folders.size () == 1 ? (folders.front ()->collapsed () ? _("Expand Folder") : _("Collapse Folder")) : _("Toggle Folder(s) Collapsed"));
+
+	for (auto const& folder : folders) {
+		XMLNode& before (folder->get_state ());
+		folder->set_collapsed (!folder->collapsed ());
+		XMLNode& after (folder->get_state ());
+		_session->add_command (new MementoCommand<TrackFolder> (*folder, &before, &after));
+	}
+
 	commit_reversible_command ();
 }
 

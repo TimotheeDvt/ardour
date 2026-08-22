@@ -250,6 +250,7 @@ public:
 
 	void remove_tracks ();
 	void create_folder_from_selection ();
+	void toggle_selected_folder_collapsed ();
 
 	/* tempo */
 
