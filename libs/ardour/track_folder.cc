@@ -264,6 +264,10 @@ TrackFolder::remove_route (std::shared_ptr<Route> r)
 void
 TrackFolder::remove_when_going_away (std::weak_ptr<Route> wr)
 {
+	if (_session.deletion_in_progress ()) {
+		return;
+	}
+
 	std::shared_ptr<Route> r (wr.lock ());
 
 	if (!r) {
