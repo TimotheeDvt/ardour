@@ -152,7 +152,7 @@ TrackFolder::make_bus ()
 	 */
 	_bus->set_name (SessionObject::name ());
 	_bus->presentation_info ().set_color (_color.val ());
-	_bus->DropReferences.connect_same_thread (*this, std::bind (&TrackFolder::unset_bus, this));
+	_bus->DropReferences.connect_same_thread (_bus_connection, std::bind (&TrackFolder::unset_bus, this));
 
 	std::shared_ptr<Bundle> bundle = _bus->input ()->bundle ();
 
@@ -239,7 +239,10 @@ TrackFolder::add_route (std::shared_ptr<Route> r)
 	}
 
 	_routes.push_back (r);
-	r->DropReferences.connect_same_thread (*this, std::bind (&TrackFolder::remove_when_going_away, this, std::weak_ptr<Route> (r)));
+
+	std::shared_ptr<PBD::ScopedConnection> c (new PBD::ScopedConnection);
+	r->DropReferences.connect_same_thread (*c, std::bind (&TrackFolder::remove_when_going_away, this, std::weak_ptr<Route> (r)));
+	_route_connections[r] = c;
 
 	_session.set_dirty ();
 	RouteAdded (shared_from_this (), std::weak_ptr<Route> (r)); /* EMIT SIGNAL */
@@ -256,6 +259,7 @@ TrackFolder::remove_route (std::shared_ptr<Route> r)
 	}
 
 	_routes.erase (i);
+	_route_connections.erase (r);
 	_session.set_dirty ();
 	RouteRemoved (shared_from_this (), std::weak_ptr<Route> (r)); /* EMIT SIGNAL */
 	return 0;
@@ -433,12 +437,13 @@ TrackFolder::set_state (const XMLNode& node, int version)
 	}
 
 	_bus.reset ();
+	_bus_connection.disconnect ();
 	PBD::ID bus_id (0);
 	if (node.get_property ("bus", bus_id)) {
 		std::shared_ptr<Route> r = _session.route_by_id (bus_id);
 		if (r) {
 			_bus = r;
-			_bus->DropReferences.connect_same_thread (*this, std::bind (&TrackFolder::unset_bus, this));
+			_bus->DropReferences.connect_same_thread (_bus_connection, std::bind (&TrackFolder::unset_bus, this));
 		}
 	}
 

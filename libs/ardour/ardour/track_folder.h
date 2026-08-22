@@ -18,6 +18,7 @@
 
 #pragma once
 
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -109,6 +110,9 @@ private:
 	PBD::Property<bool>     _collapsed;
 	PBD::Property<uint32_t> _color;
 	std::shared_ptr<Route>  _bus;
+	PBD::ScopedConnection   _bus_connection;
+
+	std::map<std::shared_ptr<Route>, std::shared_ptr<PBD::ScopedConnection> > _route_connections;
 
 	void remove_when_going_away (std::weak_ptr<Route>);
 	bool check_bus_compat (DataType&, uint32_t&) const;
