@@ -152,3 +152,17 @@ waf3-*
 
 # misc custom files git should ignore
 /local
+
+/bin
+/etc
+/lib
+build.log
+
+# linux_packaging build/download output (tools/linux_packaging also has tracked scripts)
+/tools/linux_packaging/*.tar
+/tools/linux_packaging/*.zip
+/tools/linux_packaging/*.tgz
+/tools/linux_packaging/file_list.txt
+
+# versioned share/ install staging dir (share/ itself has tracked source)
+/share/ardour[0-9]*

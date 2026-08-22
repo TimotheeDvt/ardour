@@ -817,6 +817,7 @@ int main() { return 0; }''',
     conf.env.append_value('CFLAGS', c_flags)
     conf.env.append_value('CXXFLAGS', compiler_flags)
     conf.env.append_value('CXXFLAGS', cxx_flags)
+    conf.env.append_value('CXXFLAGS', '-fno-char8_t')
     conf.env.append_value('LINKFLAGS', linker_flags)
 
 def create_resource_file(name):
