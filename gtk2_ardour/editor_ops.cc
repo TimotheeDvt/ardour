@@ -7783,6 +7783,7 @@ Editor::quantize_selected_regions ()
 
 	for (list<std::shared_ptr<Playlist> >::iterator pi = used_playlists.begin (); pi != used_playlists.end (); ++pi) {
 		(*pi)->clear_changes ();
+		(*pi)->clear_owned_changes ();
 		(*pi)->freeze ();
 	}
 
@@ -7795,6 +7796,15 @@ Editor::quantize_selected_regions ()
 		current_quantize->hide ();
 		for (list<std::shared_ptr<Playlist> >::iterator pi = used_playlists.begin (); pi != used_playlists.end (); ++pi) {
 			(*pi)->thaw ();
+			/* a Playlist-level diff alone doesn't capture layering_index
+			 * changes on third-party regions caused by the add/remove
+			 * churn inside replace_region()/set_position() -- rdiff()
+			 * picks those up too, matching split_region_for_quantize()'s
+			 * own pattern.
+			 */
+			vector<Command*> cmds;
+			(*pi)->rdiff (cmds);
+			_session->add_commands (cmds);
 			_session->add_command (new StatefulDiffCommand (*pi));
 		}
 		delete current_quantize;
@@ -7812,6 +7822,9 @@ Editor::quantize_selected_regions ()
 
 	for (list<std::shared_ptr<Playlist> >::iterator pi = used_playlists.begin (); pi != used_playlists.end (); ++pi) {
 		(*pi)->thaw ();
+		vector<Command*> cmds;
+		(*pi)->rdiff (cmds);
+		_session->add_commands (cmds);
 		_session->add_command (new StatefulDiffCommand (*pi));
 	}
 
