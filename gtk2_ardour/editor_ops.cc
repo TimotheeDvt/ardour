@@ -140,6 +140,9 @@
 #include "utils.h"
 #include "vca_time_axis.h"
 
+#include <rubberband/RubberBandStretcher.h>
+using namespace RubberBand;
+
 #include "pbd/i18n.h"
 
 using namespace std;
@@ -7774,7 +7777,7 @@ Editor::quantize_selected_regions ()
 
 	if (progress->jobs.empty ()) {
 		delete progress;
-		abort_reversible_command ();
+		commit_reversible_command ();
 		return;
 	}
 
@@ -7792,10 +7795,11 @@ Editor::quantize_selected_regions ()
 		current_quantize->hide ();
 		for (list<std::shared_ptr<Playlist> >::iterator pi = used_playlists.begin (); pi != used_playlists.end (); ++pi) {
 			(*pi)->thaw ();
+			_session->add_command (new StatefulDiffCommand (*pi));
 		}
 		delete current_quantize;
 		current_quantize = 0;
-		abort_reversible_command ();
+		commit_reversible_command ();
 		return;
 	}
 
@@ -7806,8 +7810,6 @@ Editor::quantize_selected_regions ()
 	pthread_join (current_quantize->request.thread, 0);
 	current_quantize->hide ();
 
-	bool cancelled = current_quantize->request.cancel;
-
 	for (list<std::shared_ptr<Playlist> >::iterator pi = used_playlists.begin (); pi != used_playlists.end (); ++pi) {
 		(*pi)->thaw ();
 		_session->add_command (new StatefulDiffCommand (*pi));
@@ -7816,11 +7818,16 @@ Editor::quantize_selected_regions ()
 	delete current_quantize;
 	current_quantize = 0;
 
-	if (cancelled) {
-		abort_reversible_command ();
-	} else {
-		commit_reversible_command ();
-	}
+	/* even when cancelled, everything up to the cancel point (the splits,
+	 * plus any move-only jobs already applied on the worker thread) really
+	 * happened -- commit so it stays undo-able as one step, rather than
+	 * aborting and leaving the session in a partially-quantized state with
+	 * no way to Ctrl+Z back to the original region. Anything still
+	 * mid-stretch when cancelled is cleaned up separately in
+	 * do_quantize_regions() via RegionFactory::map_remove(), so it never
+	 * reaches the playlist and has nothing to commit here.
+	 */
+	commit_reversible_command ();
 }
 
 void
@@ -7847,11 +7854,11 @@ Editor::do_quantize_regions ()
 
 		} else {
 
-			ARDOUR::TimeFXRequest request;
-			request.time_fraction = i->ratio;
-			request.pitch_fraction = 1.0;
+			current_quantize->request.time_fraction = i->ratio;
+			current_quantize->request.pitch_fraction = 1.0;
+			current_quantize->request.opts = RubberBandStretcher::OptionTransientsCrisp;
 
-			RBStretch fx (*_session, request);
+			RBStretch fx (*_session, current_quantize->request);
 
 			if (fx.run (i->region, current_quantize) == 0 && !fx.results.empty ()) {
 				results[i->region] = fx.results.front ();

@@ -26,7 +26,7 @@
 #include "temporal/timeline.h"
 #include "temporal/types.h"
 
-#include "ardour/interthread_info.h"
+#include "ardour/timefx_request.h"
 
 #include "ardour_dialog.h"
 #include "progress_reporter.h"
@@ -65,7 +65,7 @@ class QuantizeProgressDialog : public ArdourDialog, public ProgressReporter
 public:
 	QuantizeProgressDialog (Gtk::Window& parent);
 
-	ARDOUR::InterThreadInfo         request;
+	ARDOUR::TimeFXRequest           request;
 	std::vector<QuantizeSliceJob>   jobs;
 
 	void start_updates ();
