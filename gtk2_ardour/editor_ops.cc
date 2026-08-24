@@ -121,7 +121,10 @@
 #include "pianoroll_window.h"
 #include "quantize_dialog.h"
 #include "region_gain_line.h"
+#include "ardour/stretch.h"
+
 #include "folder_time_axis_view.h"
+#include "quantize_progress_dialog.h"
 #include "route_time_axis.h"
 #include "selection.h"
 #include "selection_templates.h"
@@ -7503,6 +7506,404 @@ Editor::split_region_at_points (std::shared_ptr<Region> r, AnalysisFeatureList& 
 			set_selected_regionview_from_region_list ((*i), SelectionAdd);
 		}
 	}
+}
+
+/** Split @p r at each position in @p positions, like split_region_at_points(),
+ *  but -- rather than only optionally selecting the results -- always return
+ *  the ordered list of new slice regions in @p out_slices, along with the
+ *  original sample position of each internal split point in @p
+ *  out_boundaries (out_boundaries[i] is the position at which out_slices[i]
+ *  ends and out_slices[i+1] begins, so out_slices.size() == out_boundaries.size() + 1
+ *  whenever anything was actually split).
+ */
+void
+Editor::split_region_for_quantize (std::shared_ptr<Region> r, AnalysisFeatureList& positions,
+                                    vector<std::shared_ptr<Region> >& out_slices,
+                                    vector<samplepos_t>& out_boundaries)
+{
+	std::shared_ptr<Playlist> pl = r->playlist ();
+
+	if (!pl || positions.empty ()) {
+		return;
+	}
+
+	AnalysisFeatureList::const_iterator x = positions.begin ();
+
+	pl->clear_changes ();
+	pl->clear_owned_changes ();
+
+	pl->freeze ();
+	pl->remove_region (r);
+
+	timepos_t pos (AudioTime);
+
+	const timepos_t rstart = r->position ();
+	const samplepos_t start_sample = r->position_sample ();
+	const samplepos_t end_sample = r->last_sample () + 1;
+
+	while (x != positions.end ()) {
+
+		if (*x < start_sample || *x >= end_sample) {
+			++x;
+			continue;
+		}
+
+		timepos_t file_start = r->start () + pos;
+		timecnt_t len = pos.distance (timepos_t (*x)) - rstart;
+
+		if (!len.is_positive ()) {
+			++x;
+			continue;
+		}
+
+		string new_name;
+
+		if (RegionFactory::region_name (new_name, r->name ())) {
+			break;
+		}
+
+		PropertyList plist (r->derive_properties ());
+
+		plist.add (ARDOUR::Properties::start, file_start);
+		plist.add (ARDOUR::Properties::length, len);
+		plist.add (ARDOUR::Properties::name, new_name);
+		plist.add (ARDOUR::Properties::layer, 0);
+
+		std::shared_ptr<Region> nr = RegionFactory::create (r->sources (), plist, false);
+		RegionFactory::map_add (nr);
+
+		pl->add_region (nr, rstart + pos);
+
+		out_slices.push_back (nr);
+		out_boundaries.push_back (*x);
+
+		pos += len;
+		++x;
+	}
+
+	string new_name;
+
+	RegionFactory::region_name (new_name, r->name ());
+
+	PropertyList plist (r->derive_properties ());
+
+	plist.add (ARDOUR::Properties::start, r->start () + pos);
+	plist.add (ARDOUR::Properties::length, (r->position () + pos).distance (r->end_position ()));
+	plist.add (ARDOUR::Properties::name, new_name);
+	plist.add (ARDOUR::Properties::layer, 0);
+
+	std::shared_ptr<Region> nr = RegionFactory::create (r->sources (), plist, false);
+	RegionFactory::map_add (nr);
+	pl->add_region (nr, r->position () + pos);
+
+	out_slices.push_back (nr);
+	/* the trailing slice has no boundary after it */
+
+	pl->thaw ();
+
+	/* We might have removed regions, which alters other regions' layering_index,
+	   so we need to do a recursive diff here.
+	*/
+	vector<Command*> cmds;
+	pl->rdiff (cmds);
+	_session->add_commands (cmds);
+
+	_session->add_command (new StatefulDiffCommand (pl));
+}
+
+void
+Editor::quantize_selected_regions ()
+{
+	RegionSelection rs = get_regions_from_selection_and_entered ();
+
+	if (!_session || rs.empty ()) {
+		return;
+	}
+
+	vector<std::shared_ptr<AudioRegion> > regions;
+
+	for (RegionSelection::iterator i = rs.begin (); i != rs.end (); ++i) {
+		std::shared_ptr<AudioRegion> ar = std::dynamic_pointer_cast<AudioRegion> ((*i)->region ());
+		if (ar) {
+			regions.push_back (ar);
+		}
+	}
+
+	if (regions.empty ()) {
+		return;
+	}
+
+	QuantizeDialog dialog (*transient_parent (), *this);
+
+	if (dialog.run () != RESPONSE_ACCEPT) {
+		dialog.hide ();
+		return;
+	}
+	dialog.hide ();
+
+	Beats grid_size = dialog.start_grid_size ();
+
+	if (grid_size <= Beats ()) {
+		return;
+	}
+
+	float strength = dialog.strength ();
+	int64_t threshold_ticks = std::abs (dialog.threshold ().to_ticks ());
+
+	/* gather transients for every region up front, so we only need to
+	 * warn once about the total slice count before mutating anything.
+	 */
+	typedef std::map<std::shared_ptr<AudioRegion>, AnalysisFeatureList> TransientMap;
+	TransientMap transients;
+	size_t total_splits = 0;
+
+	for (vector<std::shared_ptr<AudioRegion> >::iterator ri = regions.begin (); ri != regions.end (); ++ri) {
+		AnalysisFeatureList positions;
+		(*ri)->transients (positions);
+		if (!positions.empty ()) {
+			total_splits += positions.size ();
+			transients[*ri] = positions;
+		}
+	}
+
+	if (transients.empty ()) {
+		return;
+	}
+
+	if (total_splits > 20) {
+		std::string msgstr = string_compose (_("You are about to slice %1 region(s) into a total of %2 pieces for quantizing.\nThis could take a long time."), transients.size (), total_splits + transients.size ());
+		ArdourMessageDialog msg (msgstr, false, Gtk::MESSAGE_INFO, Gtk::BUTTONS_OK_CANCEL);
+		msg.set_title (_("Quantize Audio"));
+		if (msg.run () != Gtk::RESPONSE_OK) {
+			return;
+		}
+	}
+
+	begin_reversible_command (_("Quantize Audio"));
+
+	TempoMap::SharedPtr tmap (TempoMap::use ());
+
+	list<std::shared_ptr<Playlist> > used_playlists;
+	QuantizeProgressDialog* progress = new QuantizeProgressDialog (*transient_parent ());
+
+	for (TransientMap::iterator ti = transients.begin (); ti != transients.end (); ++ti) {
+		std::shared_ptr<AudioRegion> ar = ti->first;
+		AnalysisFeatureList& positions = ti->second;
+
+		std::shared_ptr<Playlist> pl = ar->playlist ();
+		if (!pl) {
+			continue;
+		}
+
+		vector<std::shared_ptr<Region> > slices;
+		vector<samplepos_t> boundaries;
+
+		split_region_for_quantize (ar, positions, slices, boundaries);
+
+		if (slices.size () < 2) {
+			/* nothing usable was actually split (e.g. every candidate
+			 * point fell outside the region or produced a zero-length
+			 * slice)
+			 */
+			continue;
+		}
+
+		if (find (used_playlists.begin (), used_playlists.end (), pl) == used_playlists.end ()) {
+			used_playlists.push_back (pl);
+		}
+
+		vector<samplepos_t> targets (boundaries.size ());
+
+		for (size_t i = 0; i < boundaries.size (); ++i) {
+			Beats orig_beats = tmap->quarters_at_sample (boundaries[i]);
+			Beats snapped_beats = orig_beats.round_to_multiple (grid_size);
+			int64_t delta_ticks = (snapped_beats - orig_beats).to_ticks ();
+
+			if (std::abs (delta_ticks) < threshold_ticks) {
+				targets[i] = boundaries[i];
+			} else {
+				int64_t target_ticks = orig_beats.to_ticks () + llround (delta_ticks * (strength / 100.0));
+				targets[i] = tmap->sample_at (Beats::ticks (target_ticks));
+			}
+
+			if (i > 0 && targets[i] <= targets[i - 1]) {
+				/* never let a correction invert slice ordering */
+				targets[i] = targets[i - 1] + 1;
+			}
+		}
+
+		samplepos_t region_start_sample = ar->position_sample ();
+
+		for (size_t i = 0; i < slices.size (); ++i) {
+			samplecnt_t original_length = slices[i]->length_samples ();
+
+			if (original_length <= 0) {
+				continue;
+			}
+
+			QuantizeSliceJob job;
+			job.region = slices[i];
+			job.playlist = pl;
+
+			samplepos_t new_start = (i == 0) ? region_start_sample : targets[i - 1];
+
+			if (i < boundaries.size ()) {
+				/* pinned at both ends: stretch to fit exactly */
+				samplepos_t new_end = targets[i];
+				samplecnt_t new_length = new_end - new_start;
+				double ratio = double (new_length) / double (original_length);
+
+				if (new_length <= 0 || ratio < 0.5 || ratio > 2.0) {
+					/* degenerate correction: fall back to a plain move,
+					 * leaving this slice's own length untouched
+					 */
+					job.ratio = ratio_t (1, 1);
+				} else {
+					job.ratio = ratio_t (new_length, original_length);
+				}
+			} else {
+				/* trailing slice: nothing after it to align to */
+				job.ratio = ratio_t (1, 1);
+			}
+
+			job.target_position = timepos_t (new_start);
+
+			progress->jobs.push_back (job);
+		}
+	}
+
+	if (progress->jobs.empty ()) {
+		delete progress;
+		abort_reversible_command ();
+		return;
+	}
+
+	for (list<std::shared_ptr<Playlist> >::iterator pi = used_playlists.begin (); pi != used_playlists.end (); ++pi) {
+		(*pi)->clear_changes ();
+		(*pi)->freeze ();
+	}
+
+	current_quantize = progress;
+	current_quantize->show_all ();
+	current_quantize->start_updates ();
+
+	if (pthread_create_and_store ("quantize", &current_quantize->request.thread, quantize_thread, this)) {
+		error << _("quantize cannot be started - thread creation error") << endmsg;
+		current_quantize->hide ();
+		for (list<std::shared_ptr<Playlist> >::iterator pi = used_playlists.begin (); pi != used_playlists.end (); ++pi) {
+			(*pi)->thaw ();
+		}
+		delete current_quantize;
+		current_quantize = 0;
+		abort_reversible_command ();
+		return;
+	}
+
+	while (!current_quantize->request.done && !current_quantize->request.cancel) {
+		gtk_main_iteration ();
+	}
+
+	pthread_join (current_quantize->request.thread, 0);
+	current_quantize->hide ();
+
+	bool cancelled = current_quantize->request.cancel;
+
+	for (list<std::shared_ptr<Playlist> >::iterator pi = used_playlists.begin (); pi != used_playlists.end (); ++pi) {
+		(*pi)->thaw ();
+		_session->add_command (new StatefulDiffCommand (*pi));
+	}
+
+	delete current_quantize;
+	current_quantize = 0;
+
+	if (cancelled) {
+		abort_reversible_command ();
+	} else {
+		commit_reversible_command ();
+	}
+}
+
+void
+Editor::do_quantize_regions ()
+{
+	typedef std::map<std::shared_ptr<Region>, std::shared_ptr<Region> > ResultMap;
+	ResultMap results;
+
+	uint32_t const N = current_quantize->jobs.size ();
+
+	for (vector<QuantizeSliceJob>::const_iterator i = current_quantize->jobs.begin (); i != current_quantize->jobs.end (); ++i) {
+
+		if (current_quantize->request.cancel) {
+			break;
+		}
+
+		current_quantize->descend (1.0 / N);
+
+		if (i->ratio.is_unity ()) {
+
+			i->region->clear_changes ();
+			i->region->set_position (i->target_position);
+			_session->add_command (new StatefulDiffCommand (i->region));
+
+		} else {
+
+			ARDOUR::TimeFXRequest request;
+			request.time_fraction = i->ratio;
+			request.pitch_fraction = 1.0;
+
+			RBStretch fx (*_session, request);
+
+			if (fx.run (i->region, current_quantize) == 0 && !fx.results.empty ()) {
+				results[i->region] = fx.results.front ();
+			}
+		}
+
+		current_quantize->ascend ();
+	}
+
+	pthread_setcancelstate (PTHREAD_CANCEL_DISABLE, NULL);
+
+	if (current_quantize->request.cancel) {
+
+		for (ResultMap::const_iterator i = results.begin (); i != results.end (); ++i) {
+			std::weak_ptr<Region> w = i->second;
+			RegionFactory::map_remove (w);
+		}
+
+	} else {
+
+		for (vector<QuantizeSliceJob>::const_iterator i = current_quantize->jobs.begin (); i != current_quantize->jobs.end (); ++i) {
+			ResultMap::const_iterator r = results.find (i->region);
+			if (r == results.end ()) {
+				continue;
+			}
+			i->playlist->replace_region (i->region, r->second, i->target_position);
+		}
+	}
+
+	pthread_setcancelstate (PTHREAD_CANCEL_ENABLE, NULL);
+
+	current_quantize->request.done = true;
+}
+
+void*
+Editor::quantize_thread (void* arg)
+{
+	SessionEvent::create_per_thread_pool ("quantize events", 64);
+	Temporal::TempoMap::fetch ();
+
+	Editor* ed = static_cast<Editor*> (arg);
+
+	pthread_setcanceltype (PTHREAD_CANCEL_ASYNCHRONOUS, 0);
+
+	ed->do_quantize_regions ();
+
+	/* sleep for a bit so that our request buffer for the GUI event loop
+	 * doesn't die before any changes we made are processed by the GUI,
+	 * matching Editor::timefx_thread()'s own convention.
+	 */
+	Glib::usleep (G_USEC_PER_SEC / 5);
+	return 0;
 }
 
 void

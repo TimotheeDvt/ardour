@@ -1441,6 +1441,8 @@ Editor::register_region_actions ()
 
 	register_region_action (_region_actions, RegionActionTarget (SelectedRegions|EnteredRegions), "split-region-at-transients", _("Split at Percussion Onsets"), sigc::mem_fun(*this, &Editor::split_region_at_transients));
 
+	register_region_action (_region_actions, RegionActionTarget (SelectedRegions|EnteredRegions), "quantize-audio-regions", _("Quantize Audio"), sigc::mem_fun(*this, &Editor::quantize_selected_regions));
+
 	/* Open the list editor dialogue for the selected regions */
 	register_region_action (_region_actions, RegionActionTarget (SelectedRegions), "show-region-list-editor", _("List Editor..."), sigc::mem_fun (*this, &Editor::show_midi_list_editor));
 

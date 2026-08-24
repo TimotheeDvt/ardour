@@ -154,6 +154,7 @@ class GridLines;
 class TimeAxisView;
 class TimeInfoBox;
 class TimeFXDialog;
+class QuantizeProgressDialog;
 class TimeSelection;
 class RegionLayeringOrderEditor;
 class VerboseCursor;
@@ -462,6 +463,10 @@ public:
 	/* editing operations that need to be public */
 	void split_regions_at (Temporal::timepos_t const & , RegionSelection&);
 	void split_region_at_points (std::shared_ptr<ARDOUR::Region>, ARDOUR::AnalysisFeatureList&, bool can_ferret, bool select_new = false);
+	void split_region_for_quantize (std::shared_ptr<ARDOUR::Region>, ARDOUR::AnalysisFeatureList&,
+	                                 std::vector<std::shared_ptr<ARDOUR::Region> >& out_slices,
+	                                 std::vector<ARDOUR::samplepos_t>& out_boundaries);
+	void quantize_selected_regions ();
 	RegionSelection get_regions_from_selection_and_mouse (Temporal::timepos_t const &);
 	void do_remove_gaps ();
 	void remove_gaps (Temporal::timecnt_t const & threshold, Temporal::timecnt_t const & leave, bool markers_too);
@@ -1989,6 +1994,10 @@ private:
 	TimeFXDialog* current_timefx;
 	static void* timefx_thread (void* arg);
 	void do_timefx (bool fixed_end);
+
+	QuantizeProgressDialog* current_quantize;
+	static void* quantize_thread (void* arg);
+	void do_quantize_regions ();
 
 	int time_stretch (RegionSelection&, Temporal::ratio_t const & fraction, bool fixed_end);
 	int pitch_shift (RegionSelection&, float cents);
