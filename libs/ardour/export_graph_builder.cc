@@ -169,6 +169,26 @@ ExportGraphBuilder::~ExportGraphBuilder ()
 samplecnt_t
 ExportGraphBuilder::process (samplecnt_t samples, bool last_cycle)
 {
+	if (samples > process_buffer_samples) {
+		samplecnt_t remain   = samples;
+		samplecnt_t consumed = 0;
+		while (remain > 0) {
+			samplecnt_t chunk = std::min (remain, process_buffer_samples);
+			remain -= chunk;
+			consumed += process_one_cycle (chunk, last_cycle && remain == 0);
+			if (remain > 0) {
+				AudioEngine::instance()->split_cycle (chunk);
+			}
+		}
+		return consumed;
+	}
+
+	return process_one_cycle (samples, last_cycle);
+}
+
+samplecnt_t
+ExportGraphBuilder::process_one_cycle (samplecnt_t samples, bool last_cycle)
+{
 	assert(samples <= process_buffer_samples);
 
 	sampleoffset_t off = 0;

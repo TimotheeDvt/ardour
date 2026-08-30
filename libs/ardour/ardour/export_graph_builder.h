@@ -92,6 +92,11 @@ class LIBARDOUR_API ExportGraphBuilder
 
 	samplecnt_t process (samplecnt_t samples, bool last_cycle);
 	bool post_process (); // returns true when finished
+
+  private:
+	samplecnt_t process_one_cycle (samplecnt_t samples, bool last_cycle);
+
+  public:
 	bool need_postprocessing () const { return !intermediates.empty(); }
 	bool realtime() const { return _realtime; }
 	unsigned get_postprocessing_cycle_count() const;
