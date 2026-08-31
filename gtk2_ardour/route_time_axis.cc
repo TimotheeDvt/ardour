@@ -126,6 +126,7 @@ RouteTimeAxisView::RouteTimeAxisView (PublicEditor& ed, Session* sess, ArdourCan
 	, _ignore_set_layer_display (false)
 	, pan_automation_item(NULL)
 	, _folder_collapse_button (0)
+	, _folder_region_ghosts (_editor, *this)
 {
 	subplugin_menu.set_name ("ArdourContextMenu");
 	number_label.set_name("tracknumber label");
@@ -388,6 +389,7 @@ RouteTimeAxisView::set_folder (std::shared_ptr<TrackFolder> f)
 
 	_folder_connections.drop_connections ();
 	_folder = f;
+	_folder_region_ghosts.set_folder (_folder);
 
 	if (!_folder) {
 		if (_folder_collapse_button) {

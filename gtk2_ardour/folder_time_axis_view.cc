@@ -94,6 +94,7 @@ FolderTimeAxisView::FolderTimeAxisView (PublicEditor& ed, Session* s, ArdourCanv
 	: SessionHandlePtr (s)
 	, TimeAxisView (s, ed, 0, canvas)
 	, _folder (folder)
+	, _region_ghosts (ed, *this)
 {
 	controls_base_selected_name = X_("ControlMasterBaseSelected");
 	controls_base_unselected_name = X_("ControlMasterBaseUnselected");
@@ -122,6 +123,8 @@ FolderTimeAxisView::FolderTimeAxisView (PublicEditor& ed, Session* s, ArdourCanv
 	update_color ();
 
 	set_height (preset_height (HeightSmall));
+
+	_region_ghosts.set_folder (_folder);
 }
 
 FolderTimeAxisView::~FolderTimeAxisView ()

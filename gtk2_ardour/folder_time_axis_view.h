@@ -20,6 +20,7 @@
 
 #include "widgets/ardour_button.h"
 
+#include "folder_region_ghosts.h"
 #include "time_axis_view.h"
 
 namespace ArdourCanvas {
@@ -70,6 +71,9 @@ private:
 	std::shared_ptr<ARDOUR::TrackFolder> _folder;
 	ArdourWidgets::ArdourButton          _collapse_button;
 	PBD::ScopedConnectionList             _folder_connections;
+
+	/* summary ("ghost") regions shown on this row while the folder is collapsed */
+	FolderRegionGhosts _region_ghosts;
 
 	bool collapse_button_release (GdkEventButton*);
 	void folder_property_changed (PBD::PropertyChange const&);

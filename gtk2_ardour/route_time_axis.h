@@ -42,6 +42,7 @@
 #include "ardour/types.h"
 
 #include "ardour_dialog.h"
+#include "folder_region_ghosts.h"
 #include "route_ui.h"
 #include "enums.h"
 #include "stripable_time_axis.h"
@@ -323,5 +324,6 @@ private:
 	std::shared_ptr<ARDOUR::TrackFolder> _folder;
 	ArdourWidgets::ArdourButton*         _folder_collapse_button;
 	PBD::ScopedConnectionList            _folder_connections;
+	FolderRegionGhosts _folder_region_ghosts;
 };
 

@@ -132,6 +132,7 @@ gtk2_ardour_sources = [
         'fft_result.cc',
         'floating_text_entry.cc',
         'foldback_strip.cc',
+        'folder_region_ghosts.cc',
         'folder_time_axis_view.cc',
         'sfdb_freesound_mootcher.cc',
         'gain_meter.cc',
