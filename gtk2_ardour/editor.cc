@@ -3371,11 +3371,11 @@ Editor::set_visible_track_count (int32_t n)
 	} else if (_visible_track_count == 0) {
 		uint32_t n = 0;
 		for (TrackViewList::const_iterator i = track_views.begin(); i != track_views.end(); ++i) {
-			if ((*i)->marked_for_display()) {
+			if ((*i)->marked_for_display() && !(*i)->hidden()) {
 				++n;
 				TimeAxisView::Children cl ((*i)->get_child_list ());
 				for (TimeAxisView::Children::const_iterator j = cl.begin(); j != cl.end(); ++j) {
-					if ((*j)->marked_for_display()) {
+					if ((*j)->marked_for_display() && !(*j)->hidden()) {
 						++n;
 					}
 				}
