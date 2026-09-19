@@ -235,6 +235,7 @@ public:
 	LilvNode* bufz_fixedBlockLength;
 	LilvNode* bufz_nominalBlockLength;
 	LilvNode* bufz_coarseBlockLength;
+	LilvNode* bufz_minBlockLength;
 	LilvNode* state_loadDefaultState;
 
 #ifdef LV2_EXTENDED
@@ -762,6 +763,15 @@ LV2Plugin::init(const void* c_plugin, samplecnt_t rate)
 	LilvNodes* optional_features = lilv_plugin_get_optional_features (plugin);
 	if (lilv_nodes_contains (optional_features, _world.bufz_coarseBlockLength)) {
 		_no_sample_accurate_ctrl = true;
+	}
+
+	LilvNodes* min_block_length = lilv_plugin_get_value (plugin, _world.bufz_minBlockLength);
+	if (min_block_length) {
+		LilvNode const* mbl = lilv_nodes_get_first (min_block_length);
+		if (mbl && lilv_node_is_int (mbl) && lilv_node_as_int (mbl) > 1) {
+			_no_sample_accurate_ctrl = true;
+		}
+		lilv_nodes_free (min_block_length);
 	}
 
 #ifdef LV2_EXTENDED
@@ -3687,6 +3697,7 @@ LV2World::LV2World()
 	bufz_fixedBlockLength    = lilv_new_uri(world, LV2_BUF_SIZE__fixedBlockLength);
 	bufz_nominalBlockLength  = lilv_new_uri(world, "http://lv2plug.in/ns/ext/buf-size#nominalBlockLength");
 	bufz_coarseBlockLength   = lilv_new_uri(world, "http://lv2plug.in/ns/ext/buf-size#coarseBlockLength");
+	bufz_minBlockLength      = lilv_new_uri(world, LV2_BUF_SIZE__minBlockLength);
 	state_loadDefaultState   = lilv_new_uri(world, LV2_STATE_PREFIX "loadDefaultState");
 
 #ifdef HAVE_SRATOM
@@ -3707,6 +3718,7 @@ LV2World::~LV2World()
 	serd_env_free (serd_env);
 #endif
 	lilv_node_free(state_loadDefaultState);
+	lilv_node_free(bufz_minBlockLength);
 	lilv_node_free(bufz_coarseBlockLength);
 	lilv_node_free(bufz_nominalBlockLength);
 	lilv_node_free(bufz_fixedBlockLength);
