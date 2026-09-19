@@ -366,7 +366,16 @@ Meter::bbt_delta (BBT_Time const & later, BBT_Time const & earlier) const
 		return BBT_Offset();
 	}
 
-	assert (later > earlier);
+	if (later < earlier) {
+		/* callers may legitimately ask for the delta between two
+		 * positions without knowing in advance which one is later,
+		 * (e.g. when the transport has jumped to an unexpected
+		 * position). Compute the magnitude with the arguments
+		 * swapped, and negate it, rather than asserting.
+		 */
+		BBT_Offset d (bbt_delta (earlier, later));
+		return BBT_Offset (-d.bars, -d.beats, -d.ticks);
+	}
 
 	BBT_Offset d;
 	BBT_Time a (earlier);
