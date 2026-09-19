@@ -258,7 +258,7 @@ CLASSINFO(TrackViewList);
 CLASSINFO(UIConfiguration);
 
 /* this needs to match gtk2_ardour/luasignal.h */
-CLASSKEYS(std::bitset<52ul>); // LuaSignal::LAST_SIGNAL
+CLASSKEYS(std::bitset<53ul>); // LuaSignal::LAST_SIGNAL
 
 CLASSKEYS(void);
 CLASSKEYS(float);
@@ -309,6 +309,7 @@ CLASSKEYS(ARDOUR::PortEngine);
 CLASSKEYS(ARDOUR::PortManager);
 CLASSKEYS(ARDOUR::PresentationInfo);
 CLASSKEYS(ARDOUR::RCConfiguration);
+CLASSKEYS(ARDOUR::RouteProcessorChange);
 CLASSKEYS(ARDOUR::Session);
 CLASSKEYS(ARDOUR::SessionConfiguration);
 CLASSKEYS(ARDOUR::SimpleExport);
@@ -2629,6 +2630,17 @@ LuaBindings::common (lua_State* L)
 		.addConst ("IsTerminal", ARDOUR::PortFlags(IsTerminal))
 		.endNamespace ()
 
+		.beginNamespace ("RouteProcessorChange")
+		.addConst ("NoProcessorChange", ARDOUR::RouteProcessorChange::Type(RouteProcessorChange::NoProcessorChange))
+		.addConst ("MeterPointChange", ARDOUR::RouteProcessorChange::Type(RouteProcessorChange::MeterPointChange))
+		.addConst ("RealTimeChange", ARDOUR::RouteProcessorChange::Type(RouteProcessorChange::RealTimeChange))
+		.addConst ("GeneralChange", ARDOUR::RouteProcessorChange::Type(RouteProcessorChange::GeneralChange))
+		.addConst ("SendReturnChange", ARDOUR::RouteProcessorChange::Type(RouteProcessorChange::SendReturnChange))
+		.addConst ("CustomPinChange", ARDOUR::RouteProcessorChange::Type(RouteProcessorChange::CustomPinChange))
+		.addConst ("ParameterNameChange", ARDOUR::RouteProcessorChange::Type(RouteProcessorChange::ParameterNameChange))
+		.addConst ("PortNameChange", ARDOUR::RouteProcessorChange::Type(RouteProcessorChange::PortNameChange))
+		.endNamespace ()
+
 		.beginNamespace ("MidiPortFlags")
 		.addConst ("MidiPortMusic", ARDOUR::MidiPortFlags(MidiPortMusic))
 		.addConst ("MidiPortControl", ARDOUR::MidiPortFlags(MidiPortControl))
@@ -3266,6 +3278,7 @@ LuaBindings::common (lua_State* L)
 		.addFunction ("worst_latency_preroll_buffer_size_ceil", &Session::worst_latency_preroll_buffer_size_ceil)
 		.addFunction ("cfg", &Session::cfg)
 		.addFunction ("route_groups", &Session::route_groups)
+		.addFunction ("route_group_by_name", &Session::route_group_by_name)
 		.addFunction ("session_range_is_free", &Session::session_range_is_free)
 		.addFunction ("set_session_range_is_free", &Session::set_session_range_is_free)
 		.addFunction ("set_session_extents", &Session::set_session_extents)

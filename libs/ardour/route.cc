@@ -36,6 +36,7 @@
 #include <cmath>
 #include <cassert>
 #include <algorithm>
+#include <regex>
 
 #include <glibmm.h>
 #include <boost/algorithm/string.hpp>
@@ -3402,6 +3403,10 @@ Route::import_state (const XMLNode& node, bool use_pbd_ids, bool processor_only)
 			if (child->get_property ("mute-point", mute_point)) {
 				_mute_master->set_mute_points (mute_point);
 			}
+		} else if (child->name() == X_("Pannable")) {
+			if (_pannable) {
+				_pannable->set_state (*child, version);
+			}
 		}
 	}
 
@@ -5076,11 +5081,83 @@ Route::save_as_template (const string& path, const string& name, const string& d
 	return rv;
 }
 
+bool Route::set_name_sequence (std::string const& str)
+{
+	if (_session.loading ()) {
+		return false;
+	}
+
+	PresentationInfo::Flag flags         = _presentation_info.flags();
+	PresentationInfo::Flag flags_exclude = PresentationInfo::Flag (PresentationInfo::Auditioner | PresentationInfo::Hidden | PresentationInfo::Singleton); // preliminary route check
+	PresentationInfo::Flag flags_mask    = PresentationInfo::Flag (flags & PresentationInfo::Route);
+	if (flags & flags_exclude) {
+		return false;
+	}
+
+	std::regex sequence_regex ("^(.*)(\\d+)\\.\\.(\\d+)(.*)$");
+	std::smatch matches;
+	bool found = std::regex_search (str, matches, sequence_regex);
+	bool numeric = true;
+
+	if (!found) {
+		std::regex sequence_regex ("^(.*)([[:alpha:]])\\.\\.([[:alpha:]])(.*)$");
+		found = std::regex_search (str, matches, sequence_regex);
+		numeric = false;
+	}
+
+	if (found && !matches.empty() && matches.size() == 5) {
+		bool rv  = true;
+		std::string start (matches[2]);
+		std::string end   (matches[3]);
+		bool lowcase = !std::isupper(static_cast<unsigned char>(start[0]));
+		if (lowcase) {
+			end[0] = std::tolower(end[0]);
+		}
+		else{
+			end[0] = std::toupper(end[0]);
+		}
+		if (PBD::naturally_less (start, end)) {
+			bool iter = false;
+			for (auto const& r : _session.get_routelist ()) {
+				if (r == shared_from_this ()) {
+					iter = true;
+				}
+				if (!iter) {
+					continue;
+				}
+
+				if (0 != (r->_presentation_info.flags() & flags_mask)) {
+					return true;
+				}
+
+				rv &= r->set_name (string_compose("%1%2%3", matches[1], start, matches[4]));
+				if (start == end || !rv) {
+					break;
+				}
+				if (numeric) {
+					start = ARDOUR::bump_name_number (start);
+				} else {
+					start = ARDOUR::bump_name_abc (start);
+					if (lowcase) {
+						start[0] = std::tolower(start[0]);
+					}
+				}
+			}
+			return rv;
+		}
+	}
+	return false;
+}
+
 bool
 Route::set_name (const string& str)
 {
 	if (str.empty ()) {
 		return false;
+	}
+
+	if (set_name_sequence (str)) {
+		return true;
 	}
 
 	if (str == name()) {
