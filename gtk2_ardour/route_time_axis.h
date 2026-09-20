@@ -321,9 +321,23 @@ private:
 	void folder_menu_toggle_collapsed ();
 	void folder_menu_remove_bus ();
 
+	void check_folder_membership ();
+	void rebind_folder_membership_connections ();
+	void update_folder_strip ();
+
 	std::shared_ptr<ARDOUR::TrackFolder> _folder;
 	ArdourWidgets::ArdourButton*         _folder_collapse_button;
 	PBD::ScopedConnectionList            _folder_connections;
 	FolderRegionGhosts _folder_region_ghosts;
+
+	/** The folder (if any) that this route is a plain member of -- distinct
+	 *  from _folder above, which is only set when this route IS a folder's
+	 *  merged bus.
+	 */
+	std::shared_ptr<ARDOUR::TrackFolder> _folder_membership;
+	Gtk::EventBox              _folder_strip;
+	PBD::ScopedConnectionList  _folder_list_connections;
+	PBD::ScopedConnectionList  _folder_membership_route_connections;
+	PBD::ScopedConnectionList  _folder_membership_color_connections;
 };
 

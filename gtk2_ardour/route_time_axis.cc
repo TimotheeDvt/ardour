@@ -65,6 +65,8 @@
 #include "ardour/track_folder.h"
 #include "ardour/track_folder_list.h"
 
+#include "gtkmm2ext/colors.h"
+
 #include "canvas/debug.h"
 
 #include "gtkmm2ext/gtk_ui.h"
@@ -128,6 +130,16 @@ RouteTimeAxisView::RouteTimeAxisView (PublicEditor& ed, Session* sess, ArdourCan
 	, _folder_collapse_button (0)
 	, _folder_region_ghosts (_editor, *this)
 {
+	_folder_strip.set_size_request (4, -1);
+	_folder_strip.set_no_show_all (true);
+	time_axis_hbox.pack_start (_folder_strip, false, false);
+	time_axis_hbox.reorder_child (_folder_strip, 0);
+
+	if (sess) {
+		sess->track_folders ()->TrackFolderAdded.connect (_folder_list_connections, invalidator (*this), std::bind (&RouteTimeAxisView::rebind_folder_membership_connections, this), gui_context ());
+		sess->track_folders ()->TrackFolderRemoved.connect (_folder_list_connections, invalidator (*this), std::bind (&RouteTimeAxisView::rebind_folder_membership_connections, this), gui_context ());
+	}
+
 	subplugin_menu.set_name ("ArdourContextMenu");
 	number_label.set_name("tracknumber label");
 	number_label.set_elements((ArdourButton::Element)(ArdourButton::Edge|ArdourButton::Body|ArdourButton::Text|ArdourButton::Inactive));
@@ -339,6 +351,7 @@ RouteTimeAxisView::set_route (std::shared_ptr<Route> rt)
 	gm.get_level_meter().signal_scroll_event().connect (sigc::mem_fun (*this, &RouteTimeAxisView::controls_ebox_scroll), false);
 
 	check_folder_bus ();
+	rebind_folder_membership_connections ();
 }
 
 RouteTimeAxisView::~RouteTimeAxisView ()
@@ -395,6 +408,7 @@ RouteTimeAxisView::set_folder (std::shared_ptr<TrackFolder> f)
 		if (_folder_collapse_button) {
 			_folder_collapse_button->hide ();
 		}
+		update_folder_strip ();
 		return;
 	}
 
@@ -414,6 +428,7 @@ RouteTimeAxisView::set_folder (std::shared_ptr<TrackFolder> f)
 	_folder->PropertyChanged.connect (_folder_connections, invalidator (*this), std::bind (&RouteTimeAxisView::folder_property_changed, this, _1), gui_context ());
 
 	update_folder_collapse_button ();
+	update_folder_strip ();
 }
 
 bool
@@ -444,6 +459,80 @@ RouteTimeAxisView::folder_property_changed (PBD::PropertyChange const& what_chan
 		update_folder_collapse_button ();
 		_editor.queue_redisplay_track_views ();
 	}
+	if (what_changed.contains (ARDOUR::Properties::color)) {
+		update_folder_strip ();
+	}
+}
+
+/** Check whether this route is a plain member of a TrackFolder (as opposed
+ *  to being a folder's own merged bus, which is tracked via _folder/set_folder
+ *  above), and (re)connect to that folder's color so the header strip stays
+ *  in sync.
+ */
+void
+RouteTimeAxisView::check_folder_membership ()
+{
+	if (!_session || !_route) {
+		return;
+	}
+
+	std::shared_ptr<TrackFolder> f = _session->track_folders ()->folder_for_route (_route);
+
+	if (f == _folder_membership) {
+		update_folder_strip ();
+		return;
+	}
+
+	_folder_membership_color_connections.drop_connections ();
+	_folder_membership = f;
+
+	if (_folder_membership) {
+		_folder_membership->PropertyChanged.connect (_folder_membership_color_connections, invalidator (*this), std::bind (&RouteTimeAxisView::update_folder_strip, this), gui_context ());
+		if (_folder_membership->has_bus ()) {
+			/* TrackFolder::set_color() forwards to the bus's own
+			 * PresentationInfo when merged, and does not itself emit
+			 * PropertyChanged in that case (see TrackFolder::set_color()).
+			 */
+			_folder_membership->bus ()->presentation_info ().PropertyChanged.connect (_folder_membership_color_connections, invalidator (*this), std::bind (&RouteTimeAxisView::update_folder_strip, this), gui_context ());
+		}
+	}
+
+	update_folder_strip ();
+}
+
+/** A route belongs to at most one folder at a time, but which folder that is
+ *  can change, so (re)connect to every folder's membership signals whenever
+ *  the set of folders itself changes.
+ */
+void
+RouteTimeAxisView::rebind_folder_membership_connections ()
+{
+	_folder_membership_route_connections.drop_connections ();
+
+	if (!_session) {
+		return;
+	}
+
+	for (auto const& f : _session->track_folders ()->list ()) {
+		f->RouteAdded.connect (_folder_membership_route_connections, invalidator (*this), std::bind (&RouteTimeAxisView::check_folder_membership, this), gui_context ());
+		f->RouteRemoved.connect (_folder_membership_route_connections, invalidator (*this), std::bind (&RouteTimeAxisView::check_folder_membership, this), gui_context ());
+	}
+
+	check_folder_membership ();
+}
+
+void
+RouteTimeAxisView::update_folder_strip ()
+{
+	std::shared_ptr<TrackFolder> f = _folder_membership ? _folder_membership : _folder;
+
+	if (!f) {
+		_folder_strip.hide ();
+		return;
+	}
+
+	_folder_strip.modify_bg (Gtk::STATE_NORMAL, Gtkmm2ext::gdk_color_from_rgba (f->color ()));
+	_folder_strip.show ();
 }
 
 void
