@@ -1823,6 +1823,8 @@ private:
 
 	void time_selection_changed ();
 	void track_selection_changed ();
+	std::shared_ptr<ARDOUR::TrackFolder> create_folder_from_selection_target (bool& ambiguous) const;
+	void update_create_folder_action_label ();
 	void update_time_selection_display ();
 	void presentation_info_changed (PBD::PropertyChange const &);
 	void handle_gui_changes (std::string const&, void*);
