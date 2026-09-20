@@ -8522,27 +8522,71 @@ Editor::create_folder_from_selection ()
 		return;
 	}
 
-	XMLNode& before (_session->track_folders ()->get_state ());
-
-	/* a route belongs to at most one folder; drop it from any existing
-	 * folder before adding it to the new one.
+	/* If the selection's existing folder membership (including via a
+	 * selected merged bus row) points unambiguously at a single existing
+	 * folder, grow that folder instead of creating a new one. This is
+	 * how a folder that already has tracks gains more: select its
+	 * current members (or its bus) together with the tracks to add, and
+	 * run this same action again.
 	 */
+	std::shared_ptr<TrackFolder> target;
+	bool ambiguous = false;
 	for (auto const& r : routes) {
 		std::shared_ptr<TrackFolder> existing = _session->track_folders ()->folder_for_route (r);
-		if (existing) {
-			existing->remove_route (r);
+		if (!existing) {
+			existing = _session->track_folders ()->folder_for_bus (r);
+		}
+		if (!existing) {
+			continue;
+		}
+		if (target && target != existing) {
+			ambiguous = true;
+			break;
+		}
+		target = existing;
+	}
+
+	XMLNode& before (_session->track_folders ()->get_state ());
+
+	std::shared_ptr<TrackFolder> folder;
+
+	if (target && !ambiguous) {
+		folder = target;
+	} else {
+		/* a route belongs to at most one folder; drop it from any existing
+		 * folder before adding it to the new one.
+		 */
+		for (auto const& r : routes) {
+			std::shared_ptr<TrackFolder> existing = _session->track_folders ()->folder_for_route (r);
+			if (existing) {
+				existing->remove_route (r);
+			}
+		}
+		folder = _session->track_folders ()->new_folder (_("Folder"));
+	}
+
+	for (auto const& r : routes) {
+		if (folder->contains (r) || folder->bus () == r) {
+			continue;
+		}
+		folder->add_route (r);
+		if (folder->has_bus ()) {
+			/* mirror TrackFolder::make_bus(): route this new member's
+			 * output into the folder's shared bus bundle, same as its
+			 * founding members.
+			 */
+			r->output ()->disconnect ();
+			r->output ()->connect_ports_to_bundle (folder->bus ()->input ()->bundle (), false, true);
 		}
 	}
 
-	std::shared_ptr<TrackFolder> folder = _session->track_folders ()->new_folder (_("Folder"));
-	for (auto const& r : routes) {
-		folder->add_route (r);
+	if (!target || ambiguous) {
+		_session->track_folders ()->add (folder);
 	}
-	_session->track_folders ()->add (folder);
 
 	XMLNode& after (_session->track_folders ()->get_state ());
 
-	begin_reversible_command (_("Create Folder"));
+	begin_reversible_command (target && !ambiguous ? _("Add to Folder") : _("Create Folder"));
 	_session->add_command (new MementoCommand<TrackFolderList> (*(_session->track_folders ()), &before, &after));
 	commit_reversible_command ();
 }
