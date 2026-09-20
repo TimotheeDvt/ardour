@@ -8498,6 +8498,72 @@ edit your ardour.rc file to set the\n\
 	 */
 }
 
+/** If the current track selection's existing folder membership (including
+ *  via a selected merged bus row, or a folder's own -- possibly collapsed --
+ *  header) points unambiguously at a single existing folder, return it (this
+ *  is how a folder that already has tracks gains more: select its header, or
+ *  its current members, or its bus, together with the tracks to add). Shared
+ *  by create_folder_from_selection() and the Track-menu label updater so
+ *  both agree on what "the target" is.
+ */
+std::shared_ptr<TrackFolder>
+Editor::create_folder_from_selection_target (bool& ambiguous) const
+{
+	TrackSelection& ts (selection->tracks);
+
+	std::shared_ptr<TrackFolder> target;
+	ambiguous = false;
+
+	auto note_target = [&] (std::shared_ptr<TrackFolder> existing) {
+		if (!existing || ambiguous) {
+			return;
+		}
+		if (target && target != existing) {
+			ambiguous = true;
+			target.reset ();
+			return;
+		}
+		target = existing;
+	};
+
+	for (TrackSelection::iterator x = ts.begin (); x != ts.end (); ++x) {
+		RouteTimeAxisView* rtv = dynamic_cast<RouteTimeAxisView*> (*x);
+		if (rtv) {
+			std::shared_ptr<TrackFolder> existing = _session->track_folders ()->folder_for_route (rtv->route ());
+			if (!existing) {
+				existing = _session->track_folders ()->folder_for_bus (rtv->route ());
+			}
+			note_target (existing);
+			continue;
+		}
+
+		FolderTimeAxisView* ftv = dynamic_cast<FolderTimeAxisView*> (*x);
+		if (ftv) {
+			/* the folder's own header was selected directly -- this is
+			 * how a user targets a folder whose members are currently
+			 * hidden because it is collapsed.
+			 */
+			note_target (ftv->folder ());
+		}
+	}
+
+	return target;
+}
+
+void
+Editor::update_create_folder_action_label ()
+{
+	Glib::RefPtr<Gtk::Action> act = ActionManager::get_action (X_("Editor"), X_("create-folder-from-selection"));
+	if (!act || !_session) {
+		return;
+	}
+
+	bool ambiguous;
+	std::shared_ptr<TrackFolder> target = create_folder_from_selection_target (ambiguous);
+
+	act->property_label () = (target && !ambiguous) ? _("Add to Folder") : _("Create Folder from Selection");
+}
+
 void
 Editor::create_folder_from_selection ()
 {
@@ -8511,40 +8577,18 @@ Editor::create_folder_from_selection ()
 
 	for (TrackSelection::iterator x = ts.begin (); x != ts.end (); ++x) {
 		RouteTimeAxisView* rtv = dynamic_cast<RouteTimeAxisView*> (*x);
-		if (!rtv) {
-			/* not a route (e.g. a VCA or another folder header) */
-			continue;
+		if (rtv) {
+			routes.push_back (rtv->route ());
 		}
-		routes.push_back (rtv->route ());
 	}
 
 	if (routes.empty ()) {
+		/* nothing to add; a lone folder-header selection is a no-op */
 		return;
 	}
 
-	/* If the selection's existing folder membership (including via a
-	 * selected merged bus row) points unambiguously at a single existing
-	 * folder, grow that folder instead of creating a new one. This is
-	 * how a folder that already has tracks gains more: select its
-	 * current members (or its bus) together with the tracks to add, and
-	 * run this same action again.
-	 */
-	std::shared_ptr<TrackFolder> target;
-	bool ambiguous = false;
-	for (auto const& r : routes) {
-		std::shared_ptr<TrackFolder> existing = _session->track_folders ()->folder_for_route (r);
-		if (!existing) {
-			existing = _session->track_folders ()->folder_for_bus (r);
-		}
-		if (!existing) {
-			continue;
-		}
-		if (target && target != existing) {
-			ambiguous = true;
-			break;
-		}
-		target = existing;
-	}
+	bool ambiguous;
+	std::shared_ptr<TrackFolder> target = create_folder_from_selection_target (ambiguous);
 
 	XMLNode& before (_session->track_folders ()->get_state ());
 
@@ -8577,6 +8621,10 @@ Editor::create_folder_from_selection ()
 			 */
 			r->output ()->disconnect ();
 			r->output ()->connect_ports_to_bundle (folder->bus ()->input ()->bundle (), false, true);
+		}
+		RouteTimeAxisView* rtav = rtav_from_route (r);
+		if (rtav) {
+			rtav->check_folder_membership ();
 		}
 	}
 

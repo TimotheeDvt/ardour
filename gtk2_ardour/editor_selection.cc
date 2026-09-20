@@ -1276,6 +1276,7 @@ Editor::track_selection_changed ()
 
 	update_selection_markers ();
 	update_section_box ();
+	update_create_folder_action_label ();
 }
 
 void
