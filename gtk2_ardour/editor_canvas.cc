@@ -40,6 +40,7 @@
 #include "canvas/arc.h"
 #include "canvas/canvas.h"
 #include "canvas/rectangle.h"
+#include "canvas/circle.h"
 #include "canvas/pixbuf.h"
 #include "canvas/scroll_group.h"
 #include "canvas/text.h"
@@ -1340,6 +1341,9 @@ Editor::which_canvas_cursor(ItemType type) const
 		case ControlPointItem:
 			cursor = _cursors->fader;
 			break;
+		case GainNodeItem:
+			cursor = _cursors->fader;
+			break;
 		case GainLineItem:
 			cursor = _cursors->cross_hair;
 			break;
@@ -1578,6 +1582,16 @@ Editor::enter_handler (ArdourCanvas::Item* item, GdkEvent* event, ItemType item_
 		}
 		break;
 
+	case GainNodeItem:
+		if (mouse_mode == MouseObject) {
+			ArdourCanvas::Circle *circle = dynamic_cast<ArdourCanvas::Circle *> (item);
+			if (circle) {
+				RegionView* rv = static_cast<RegionView*>(item->get_data ("regionview"));
+				circle->set_fill_color (rv->get_fill_color ());
+			}
+		}
+		break;
+
 	case FeatureLineItem:
 	{
 		ArdourCanvas::Line *line = dynamic_cast<ArdourCanvas::Line *> (item);
@@ -1683,6 +1697,15 @@ Editor::leave_handler (ArdourCanvas::Item* item, GdkEvent*, ItemType item_type)
 		ArdourCanvas::Rectangle *rect = dynamic_cast<ArdourCanvas::Rectangle *> (item);
 		if (rect) {
 			rect->set_fill_color (UIConfiguration::instance().color ("inactive fade handle"));
+		}
+	}
+	break;
+
+	case GainNodeItem:
+	{
+		ArdourCanvas::Circle *circle = dynamic_cast<ArdourCanvas::Circle *> (item);
+		if (circle) {
+			circle->set_fill_color (UIConfiguration::instance().color ("inactive fade handle"));
 		}
 	}
 	break;

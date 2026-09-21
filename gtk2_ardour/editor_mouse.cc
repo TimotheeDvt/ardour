@@ -351,6 +351,7 @@ Editor::button_selection (ArdourCanvas::Item* item, GdkEvent* event, ItemType it
 			case FadeInTrimHandleItem:
 			case FadeOutHandleItem:
 			case FadeOutTrimHandleItem:
+			case GainNodeItem:
 				eff_mouse_mode = MouseObject;
 				break;
 			default:
@@ -421,6 +422,7 @@ Editor::button_selection (ArdourCanvas::Item* item, GdkEvent* event, ItemType it
 		case FadeOutHandleItem:
 		case FadeOutTrimHandleItem:
 		case FadeOutItem:
+		case GainNodeItem:
 		case StartCrossFadeItem:
 		case EndCrossFadeItem:
 			if (get_smart_mode() || eff_mouse_mode != MouseRange) {
@@ -690,6 +692,7 @@ Editor::button_press_handler_1 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 		  case FadeInTrimHandleItem:
 		  case FadeOutHandleItem:
 		  case FadeOutTrimHandleItem:
+		  case GainNodeItem:
 			eff = MouseObject;
 			break;
 		default:
@@ -755,6 +758,7 @@ Editor::button_press_handler_1 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 		case RegionItem:
 		case FadeInHandleItem:
 		case FadeOutHandleItem:
+		case GainNodeItem:
 		case LeftFrameHandle:
 		case RightFrameHandle:
 		case FeatureLineItem:
@@ -846,6 +850,14 @@ Editor::button_press_handler_1 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 				RegionView* rv = reinterpret_cast<RegionView*> (item->get_data("regionview"));
 				assert (rv);
 				_drags->set (new FadeOutDrag (*this, item, rv, selection->regions,  drag_time_domain (rv->region())), event, _cursors->fade_out);
+				return true;
+			}
+
+			case GainNodeItem:
+			{
+				RegionView* rv = reinterpret_cast<RegionView*> (item->get_data("regionview"));
+				assert (rv);
+				_drags->set (new GainNodeDrag (*this, item, rv, selection->regions, drag_time_domain (rv->region())), event, _cursors->fader);
 				return true;
 			}
 
@@ -1278,6 +1290,7 @@ Editor::button_press_handler (ArdourCanvas::Item* item, GdkEvent* event, ItemTyp
 
 	if ((item_type != FadeInHandleItem) &&
 	    (item_type != FadeOutHandleItem) &&
+	    (item_type != GainNodeItem) &&
 	    !_drags->active () &&
 	    _session &&
 	    !_session->transport_rolling() &&

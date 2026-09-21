@@ -628,6 +628,49 @@ Editor::canvas_fade_out_handle_event (GdkEvent *event, ArdourCanvas::Item* item,
 	return ret;
 }
 
+bool
+Editor::canvas_gain_node_event (GdkEvent *event, ArdourCanvas::Item* item, AudioRegionView *rv)
+{
+	bool ret = false;
+
+	if (!rv->sensitive()) {
+		return false;
+	}
+
+	switch (event->type) {
+	case GDK_BUTTON_PRESS:
+	case GDK_2BUTTON_PRESS:
+	case GDK_3BUTTON_PRESS:
+		clicked_regionview = rv;
+		clicked_control_point = 0;
+		clicked_axisview = &rv->get_time_axis_view();
+		clicked_routeview = dynamic_cast<RouteTimeAxisView*>(clicked_axisview);
+		ret = button_press_handler (item, event, GainNodeItem);
+		break;
+
+	case GDK_BUTTON_RELEASE:
+		ret = button_release_handler (item, event, GainNodeItem);
+		break;
+
+	case GDK_MOTION_NOTIFY:
+		ret = motion_handler (item, event);
+		break;
+
+	case GDK_ENTER_NOTIFY:
+		ret = enter_handler (item, event, GainNodeItem);
+		break;
+
+	case GDK_LEAVE_NOTIFY:
+		ret = leave_handler (item, event, GainNodeItem);
+		break;
+
+	default:
+		break;
+	}
+
+	return ret;
+}
+
 struct DescendingRegionLayerSorter {
 	bool operator()(std::shared_ptr<Region> a, std::shared_ptr<Region> b) {
 		return a->layer() > b->layer();

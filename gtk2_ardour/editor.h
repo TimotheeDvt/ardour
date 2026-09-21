@@ -1510,6 +1510,7 @@ private:
 	bool canvas_fade_in_handle_event (GdkEvent* event,ArdourCanvas::Item*, AudioRegionView*, bool trim = false);
 	bool canvas_fade_out_event (GdkEvent* event,ArdourCanvas::Item*, AudioRegionView*);
 	bool canvas_fade_out_handle_event (GdkEvent* event,ArdourCanvas::Item*, AudioRegionView*, bool trim = false);
+	bool canvas_gain_node_event (GdkEvent* event,ArdourCanvas::Item*, AudioRegionView*);
 	bool canvas_region_view_event (GdkEvent* event,ArdourCanvas::Item*, RegionView*);
 	bool canvas_wave_view_event (GdkEvent* event,ArdourCanvas::Item*, RegionView*);
 	bool canvas_frame_handle_event (GdkEvent* event,ArdourCanvas::Item*, RegionView*);

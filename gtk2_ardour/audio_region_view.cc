@@ -33,9 +33,12 @@
 #include "ardour/playlist.h"
 #include "ardour/audioregion.h"
 #include "ardour/audiosource.h"
+#include "ardour/dB.h"
 #include "ardour/profile.h"
+#include "ardour/rc_configuration.h"
 #include "ardour/region_fx_plugin.h"
 #include "ardour/session.h"
+#include "ardour/utils.h"
 
 #include "pbd/memento_command.h"
 
@@ -46,6 +49,7 @@
 #include "gtkmm2ext/colors.h"
 
 #include "canvas/rectangle.h"
+#include "canvas/circle.h"
 #include "canvas/polygon.h"
 #include "canvas/poly_line.h"
 #include "canvas/line.h"
@@ -81,6 +85,7 @@ using namespace Editing;
 using namespace ArdourCanvas;
 
 static double const handle_size = 10; /* height of fade handles */
+static double const gain_node_size = 5; /* radius of region-gain node */
 
 Cairo::RefPtr<Cairo::Pattern> AudioRegionView::pending_peak_pattern;
 
@@ -119,6 +124,7 @@ AudioRegionView::AudioRegionView (ArdourCanvas::Container *parent, RouteTimeAxis
 	, fade_in_trim_handle(0)
 	, fade_out_trim_handle(0)
 	, pending_peak_data(0)
+	, gain_node(0)
 	, start_xfade_curve (0)
 	, start_xfade_rect (0)
 	, _start_xfade_visible (false)
@@ -143,6 +149,7 @@ AudioRegionView::AudioRegionView (ArdourCanvas::Container *parent, RouteTimeAxis
 	, fade_in_trim_handle(0)
 	, fade_out_trim_handle(0)
 	, pending_peak_data(0)
+	, gain_node(0)
 	, start_xfade_curve (0)
 	, start_xfade_rect (0)
 	, _start_xfade_visible (false)
@@ -165,6 +172,7 @@ AudioRegionView::AudioRegionView (const AudioRegionView& other, std::shared_ptr<
 	, fade_in_trim_handle(0)
 	, fade_out_trim_handle(0)
 	, pending_peak_data(0)
+	, gain_node(0)
 	, start_xfade_curve (0)
 	, start_xfade_rect (0)
 	, _start_xfade_visible (false)
@@ -233,6 +241,14 @@ AudioRegionView::init (bool wfd)
 		fade_out_trim_handle->set_fill_color (UIConfiguration::instance().color ("inactive fade handle"));
 		fade_out_trim_handle->set_data ("regionview", this);
 		fade_out_trim_handle->hide ();
+
+		gain_node = new ArdourCanvas::Circle (group);
+		CANVAS_DEBUG_NAME (gain_node, string_compose ("gain node for %1", region()->name()));
+		gain_node->set_outline_color (Gtkmm2ext::rgba_to_color (0, 0, 0, 1.0));
+		gain_node->set_fill_color (UIConfiguration::instance().color ("inactive fade handle"));
+		gain_node->set_radius (gain_node_size);
+		gain_node->set_data ("regionview", this);
+		gain_node->hide ();
 	}
 
 	setup_fade_handle_positions ();
@@ -275,6 +291,10 @@ AudioRegionView::init (bool wfd)
 
 	if (fade_out_trim_handle) {
 		fade_out_trim_handle->Event.connect (sigc::bind (sigc::mem_fun (PublicEditor::instance(), &PublicEditor::canvas_fade_out_handle_event), fade_out_trim_handle, this, true));
+	}
+
+	if (gain_node) {
+		gain_node->Event.connect (sigc::bind (sigc::mem_fun (PublicEditor::instance(), &PublicEditor::canvas_gain_node_event), gain_node, this));
 	}
 
 	set_colors ();
@@ -412,6 +432,7 @@ AudioRegionView::region_scale_amplitude_changed ()
 		waves[n]->gain_changed ();
 	}
 	region_renamed ();
+	reset_gain_node_position ();
 }
 
 void
@@ -497,7 +518,12 @@ AudioRegionView::reset_width_dependent_items (double pixel_width)
 		if (end_xfade_rect)       { end_xfade_rect->set_outline (false); }
 	}
 
+	if (pixel_width <= 20.0 || _height < 5.0) {
+		if (gain_node) { gain_node->hide (); }
+	}
+
 	reset_fade_shapes ();
+	reset_gain_node_position ();
 
 	/* Update feature lines */
 	AnalysisFeatureList analysis_features;
@@ -554,6 +580,24 @@ AudioRegionView::setup_fade_handle_positions()
 		fade_out_trim_handle->set_y0 (_height - handle_size );
 		fade_out_trim_handle->set_y1 (_height);
 	}
+}
+
+void
+AudioRegionView::reset_gain_node_position ()
+{
+	if (!gain_node) {
+		return;
+	}
+
+	std::shared_ptr<AudioRegion> ar = audio_region ();
+	gain_t const g = fabs (ar->scale_amplitude ());
+
+	double fraction = gain_to_slider_position_with_max (g, Config->get_max_gain ());
+	fraction = std::max (0.0, std::min (1.0, fraction));
+
+	double const y = (1.0 - fraction) * _height;
+
+	gain_node->set_center (ArdourCanvas::Duple (_pixel_width / 2.0, y));
 }
 
 void
@@ -622,6 +666,7 @@ AudioRegionView::set_height (gdouble height)
 	}
 
 	setup_fade_handle_positions();
+	reset_gain_node_position();
 }
 
 void
@@ -1594,6 +1639,10 @@ AudioRegionView::entered ()
 			fade_out_handle->show ();
 			fade_out_handle->raise_to_top ();
 		}
+		if (gain_node) {
+			gain_node->show ();
+			gain_node->raise_to_top ();
+		}
 		if (fade_in_trim_handle) {
 			std::shared_ptr<AudioRegion> ar (audio_region());
 			if (!ar->locked() && (ar->fade_in()->back()->when > 64 || (ar->can_trim() & Trimmable::FrontTrimEarlier))) {
@@ -1620,6 +1669,7 @@ AudioRegionView::entered ()
 		 */
 		if (fade_in_handle)       { fade_in_handle->hide(); }
 		if (fade_out_handle)      { fade_out_handle->hide(); }
+		if (gain_node)            { gain_node->hide(); }
 		if (fade_in_trim_handle)  { fade_in_trim_handle->hide(); }
 		if (fade_out_trim_handle) { fade_out_trim_handle->hide(); }
 		if (start_xfade_rect)     { start_xfade_rect->set_outline (false); }
@@ -1641,6 +1691,7 @@ AudioRegionView::exited ()
 
 	if (fade_in_handle)       { fade_in_handle->hide(); }
 	if (fade_out_handle)      { fade_out_handle->hide(); }
+	if (gain_node)            { gain_node->hide(); }
 	if (fade_in_trim_handle)  { fade_in_trim_handle->hide(); }
 	if (fade_out_trim_handle) { fade_out_trim_handle->hide(); }
 	if (start_xfade_rect)     { start_xfade_rect->set_outline (false); }
@@ -1777,6 +1828,7 @@ AudioRegionView::update_coverage_frame (LayerDisplay d)
 	if (d == Stacked) {
 		if (fade_in_handle)       { fade_in_handle->raise_to_top (); }
 		if (fade_out_handle)      { fade_out_handle->raise_to_top (); }
+		if (gain_node)            { gain_node->raise_to_top (); }
 		if (fade_in_trim_handle)  { fade_in_trim_handle->raise_to_top (); }
 		if (fade_out_trim_handle) { fade_out_trim_handle->raise_to_top (); }
 	}

@@ -27,6 +27,7 @@
 #define __gtk2_ardour_editor_drag_h_
 
 #include <list>
+#include <map>
 #include <vector>
 
 #include <ydk/gdk.h>
@@ -1180,6 +1181,38 @@ public:
 	}
 
 	void setup_pointer_offset ();
+};
+
+/** Drag the region-gain node (a handle at the top of a region used to adjust
+ *  AudioRegion::scale_amplitude by dragging vertically).
+ */
+class GainNodeDrag : public RegionDrag
+{
+public:
+	GainNodeDrag (Editor&, ArdourCanvas::Item *, RegionView *, std::list<RegionView*> const &, Temporal::TimeDomain);
+
+	void start_grab (GdkEvent *, Gdk::Cursor* c = 0);
+	void motion (GdkEvent *, bool);
+	void finished (GdkEvent *, bool);
+	void aborted (bool);
+
+	bool x_movement_matters () const {
+		return false;
+	}
+
+	bool allow_vertical_autoscroll () const {
+		return false;
+	}
+
+	bool allow_horizontal_autoscroll () const {
+		return false;
+	}
+
+private:
+	double _fixed_grab_y;
+	double _cumulative_y_drag;
+	std::map<RegionView*, ARDOUR::gain_t> _initial_gain;
+	static double _zero_gain_fraction;
 };
 
 /** Marker drag */

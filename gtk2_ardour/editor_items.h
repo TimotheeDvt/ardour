@@ -53,6 +53,7 @@ enum ItemType {
 	FadeOutItem,
 	FadeOutHandleItem,
 	FadeOutTrimHandleItem,
+	GainNodeItem,
 	NoteItem,
 	FeatureLineItem,
 	LeftFrameHandle,
