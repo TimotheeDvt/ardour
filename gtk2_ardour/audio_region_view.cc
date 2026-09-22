@@ -49,7 +49,6 @@
 #include "gtkmm2ext/colors.h"
 
 #include "canvas/rectangle.h"
-#include "canvas/circle.h"
 #include "canvas/polygon.h"
 #include "canvas/poly_line.h"
 #include "canvas/line.h"
@@ -242,11 +241,11 @@ AudioRegionView::init (bool wfd)
 		fade_out_trim_handle->set_data ("regionview", this);
 		fade_out_trim_handle->hide ();
 
-		gain_node = new ArdourCanvas::Circle (group);
+		gain_node = new ArdourCanvas::Rectangle (group);
 		CANVAS_DEBUG_NAME (gain_node, string_compose ("gain node for %1", region()->name()));
 		gain_node->set_outline_color (Gtkmm2ext::rgba_to_color (0, 0, 0, 1.0));
 		gain_node->set_fill_color (UIConfiguration::instance().color ("inactive fade handle"));
-		gain_node->set_radius (gain_node_size);
+		gain_node->set_corner_radius (gain_node_size);
 		gain_node->set_data ("regionview", this);
 		gain_node->hide ();
 	}
@@ -597,7 +596,8 @@ AudioRegionView::reset_gain_node_position ()
 
 	double const y = (1.0 - fraction) * _height;
 
-	gain_node->set_center (ArdourCanvas::Duple (_pixel_width / 2.0, y));
+	double const x = _pixel_width / 2.0;
+	gain_node->set (ArdourCanvas::Rect (x - gain_node_size, y - gain_node_size, x + gain_node_size, y + gain_node_size));
 }
 
 void

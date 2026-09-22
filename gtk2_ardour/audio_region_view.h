@@ -48,10 +48,6 @@ namespace ARDOUR {
 	struct PeakData;
 };
 
-namespace ArdourCanvas {
-	class Circle;
-};
-
 class AudioTimeAxisView;
 class GhostRegion;
 class AutomationTimeAxisView;
@@ -182,7 +178,7 @@ protected:
 	ArdourCanvas::Rectangle*        fade_in_trim_handle; ///< fade in trim handle, or 0
 	ArdourCanvas::Rectangle*        fade_out_trim_handle; ///< fade out trim handle, or 0
 	ArdourCanvas::Rectangle*        pending_peak_data;
-	ArdourCanvas::Circle*           gain_node; ///< draggable region-gain handle, or 0
+	ArdourCanvas::Rectangle*        gain_node; ///< draggable region-gain handle, or 0
 
 	static Cairo::RefPtr<Cairo::Pattern> pending_peak_pattern;
 
