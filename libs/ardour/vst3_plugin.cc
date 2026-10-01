@@ -1668,7 +1668,17 @@ VST3PI::restartComponent (int32 flags)
 		 * and restart the EditController.
 		 */
 		Stripable* s = dynamic_cast<Stripable*> (_owner);
-		assert (s);
+		if (!s) {
+			/* The plugin may call this before it has been assigned to a
+			 * Route/Stripable, e.g. while it is still being instantiated
+			 * (some plugins report kLatencyChanged as part of their own
+			 * setup). There is nothing to restart yet -- activate() will
+			 * query the current latency once the plugin is actually put
+			 * to use.
+			 */
+			DEBUG_TRACE (DEBUG::VST3Callbacks, "VST3PI::restartComponent kLatencyChanged before owner was set (ignored)\n");
+			return kResultOk;
+		}
 		s->session ().butler ()->delegate ([&]() { deactivate(); activate (); } );
 	}
 	if (flags & Vst::kIoTitlesChanged) {
