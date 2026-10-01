@@ -4368,6 +4368,140 @@ FadeOutDrag::aborted (bool)
 	}
 }
 
+double GainNodeDrag::_zero_gain_fraction = -1.0;
+
+GainNodeDrag::GainNodeDrag (Editor& e, ArdourCanvas::Item* i, RegionView* p, list<RegionView*> const& v, Temporal::TimeDomain td)
+	: RegionDrag (e, i, p, v, td)
+	, _fixed_grab_y (0.0)
+	, _cumulative_y_drag (0.0)
+{
+	if (_zero_gain_fraction < 0.0) {
+		_zero_gain_fraction = gain_to_slider_position_with_max (dB_to_coefficient (0.0), Config->get_max_gain ());
+	}
+
+	DEBUG_TRACE (DEBUG::Drags, "New GainNodeDrag\n");
+}
+
+void
+GainNodeDrag::start_grab (GdkEvent* event, Gdk::Cursor* cursor)
+{
+	Drag::start_grab (event, cursor ? cursor : editing_context.cursors ()->fader);
+
+	AudioRegionView* arv = dynamic_cast<AudioRegionView*> (_primary);
+	std::shared_ptr<AudioRegion> const ar = arv->audio_region ();
+
+	gain_t const g = fabs (ar->scale_amplitude ());
+	double const fraction = max (0.0, min (1.0, gain_to_slider_position_with_max (g, Config->get_max_gain ())));
+	_fixed_grab_y = (1.0 - fraction) * arv->height ();
+
+	for (list<DraggingView>::iterator i = _views.begin (); i != _views.end (); ++i) {
+		AudioRegionView* tmp = dynamic_cast<AudioRegionView*> (i->view);
+		if (!tmp) {
+			continue;
+		}
+		_initial_gain[tmp] = tmp->audio_region ()->scale_amplitude ();
+		tmp->region ()->clear_changes ();
+	}
+
+	char buf[32];
+	snprintf (buf, sizeof (buf), "%.1fdB", accurate_coefficient_to_dB (g));
+	show_verbose_cursor_text (buf);
+}
+
+void
+GainNodeDrag::motion (GdkEvent* event, bool first_motion)
+{
+	AudioRegionView* arv = dynamic_cast<AudioRegionView*> (_primary);
+	double const height = arv->height ();
+
+	double dy = current_pointer_y () - last_pointer_y ();
+
+	if (Keyboard::modifier_state_equals (event->button.state, ArdourKeyboard::fine_adjust_modifier ())) {
+		dy *= 0.1;
+	}
+
+	double cy = _fixed_grab_y + _cumulative_y_drag + dy;
+	double const zero_gain_y = (1.0 - _zero_gain_fraction) * height;
+
+	_cumulative_y_drag = cy - _fixed_grab_y;
+
+	cy = max (0.0, cy);
+	cy = min (height, cy);
+
+	/* make sure we hit unity gain exactly when passing through it */
+	if ((cy < zero_gain_y && (cy - dy) > zero_gain_y) || (cy > zero_gain_y && (cy - dy) < zero_gain_y)) {
+		cy = zero_gain_y;
+	}
+
+	double const fraction = 1.0 - (cy / height);
+	gain_t const g = slider_position_to_gain_with_max (fraction, Config->get_max_gain ());
+
+	for (list<DraggingView>::iterator i = _views.begin (); i != _views.end (); ++i) {
+		AudioRegionView* tmp = dynamic_cast<AudioRegionView*> (i->view);
+		if (!tmp) {
+			continue;
+		}
+
+		if (first_motion) {
+			tmp->drag_start ();
+		}
+
+		gain_t const sign = _initial_gain[tmp] < 0 ? -1.0 : 1.0;
+		tmp->audio_region ()->set_scale_amplitude (g * sign);
+	}
+
+	char buf[32];
+	snprintf (buf, sizeof (buf), "%.1fdB", accurate_coefficient_to_dB (g));
+	show_verbose_cursor_text (buf);
+}
+
+void
+GainNodeDrag::finished (GdkEvent* event, bool movement_occurred)
+{
+	for (list<DraggingView>::iterator i = _views.begin (); i != _views.end (); ++i) {
+		AudioRegionView* tmp = dynamic_cast<AudioRegionView*> (i->view);
+		if (tmp) {
+			tmp->drag_end ();
+		}
+	}
+
+	if (!movement_occurred) {
+		return;
+	}
+
+	bool in_command = false;
+
+	for (list<DraggingView>::iterator i = _views.begin (); i != _views.end (); ++i) {
+		if (!in_command) {
+			editing_context.begin_reversible_command (_("adjust region gain"));
+			in_command = true;
+		}
+		editing_context.session ()->add_command (new StatefulDiffCommand (i->view->region ()));
+	}
+
+	if (in_command) {
+		editing_context.commit_reversible_command ();
+	}
+}
+
+void
+GainNodeDrag::aborted (bool)
+{
+	for (list<DraggingView>::iterator i = _views.begin (); i != _views.end (); ++i) {
+		AudioRegionView* tmp = dynamic_cast<AudioRegionView*> (i->view);
+		if (!tmp) {
+			continue;
+		}
+
+		tmp->drag_end ();
+
+		std::map<RegionView*, gain_t>::const_iterator g = _initial_gain.find (tmp);
+		if (g != _initial_gain.end ()) {
+			tmp->audio_region ()->set_scale_amplitude (g->second);
+		}
+	}
+}
+
 MarkerDrag::MarkerDrag (Editor& e, ArdourCanvas::Item* i)
 	: EditorDrag (e, i, e.time_domain (), e.get_trackview_group())
 	, _selection_changed (false)

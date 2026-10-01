@@ -1340,6 +1340,9 @@ Editor::which_canvas_cursor(ItemType type) const
 		case ControlPointItem:
 			cursor = _cursors->fader;
 			break;
+		case GainNodeItem:
+			cursor = _cursors->fader;
+			break;
 		case GainLineItem:
 			cursor = _cursors->cross_hair;
 			break;
@@ -1569,6 +1572,7 @@ Editor::enter_handler (ArdourCanvas::Item* item, GdkEvent* event, ItemType item_
 
 	case FadeOutHandleItem:
 	case FadeOutTrimHandleItem:
+	case GainNodeItem:
 		if (mouse_mode == MouseObject) {
 			ArdourCanvas::Rectangle *rect = dynamic_cast<ArdourCanvas::Rectangle *> (item);
 			if (rect) {
@@ -1679,6 +1683,7 @@ Editor::leave_handler (ArdourCanvas::Item* item, GdkEvent*, ItemType item_type)
 	case FadeOutTrimHandleItem:
 	case FadeInHandleItem:
 	case FadeOutHandleItem:
+	case GainNodeItem:
 	{
 		ArdourCanvas::Rectangle *rect = dynamic_cast<ArdourCanvas::Rectangle *> (item);
 		if (rect) {
