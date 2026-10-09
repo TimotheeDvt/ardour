@@ -86,6 +86,7 @@ AudioEngine::AudioEngine ()
 	, session_deleted (false)
 	, _running (false)
 	, _freewheeling (false)
+	, _freewheel_block_size (0)
 	, monitor_check_interval (INT32_MAX)
 	, last_monitor_check (0)
 	, _processed_samples (-1)
@@ -540,7 +541,34 @@ AudioEngine::process_callback (pframes_t nframes)
 	 */
 
 	if (_freewheeling && !Freewheel.empty()) {
-		Freewheel (nframes);
+		/* Some backends (notably PipeWire's JACK implementation) switch
+		 * to a larger buffer-size once freewheeling starts. Export buffers
+		 * were allocated before that, for the block-size at the time
+		 * freewheeling was requested, so process oversized cycles in chunks.
+		 */
+		pframes_t bs = _freewheel_block_size.load ();
+		if (bs == 0) {
+			bs = samples_per_cycle ();
+		}
+		if (bs == 0 || nframes <= bs) {
+			Freewheel (nframes);
+		} else {
+			pframes_t remain = nframes;
+			while (remain > 0) {
+				/* keep track of split_cycle() calls by Session::process_export_fw */
+				samplecnt_t poff = Port::port_offset ();
+				pframes_t nf = std::min (remain, bs);
+				Freewheel (nf);
+				remain -= nf;
+				if (remain > 0) {
+					samplecnt_t delta = Port::port_offset () - poff;
+					assert (delta >= 0 && delta <= nf);
+					if (nf > delta) {
+						split_cycle (nf - delta);
+					}
+				}
+			}
+		}
 	} else {
 		samplepos_t start_sample = _session->transport_sample ();
 		samplecnt_t pre_roll = _session->remaining_latency_preroll ();
@@ -1182,6 +1210,12 @@ AudioEngine::freewheel (bool start_stop)
 	}
 
 	/* _freewheeling will be set when first Freewheel signal occurs */
+
+	/* Remember the block-size that export buffers were allocated for.
+	 * Some backends (PipeWire's JACK) increase the buffer-size once
+	 * freewheeling starts, see process_callback().
+	 */
+	_freewheel_block_size = start_stop ? samples_per_cycle () : 0;
 
 	return _backend->freewheel (start_stop);
 }

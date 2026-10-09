@@ -271,6 +271,7 @@ class LIBARDOUR_API AudioEngine : public PortManager, public SessionHandlePtr
 	gain_t                     session_removal_gain_step;
 	bool                      _running;
 	bool                      _freewheeling;
+	std::atomic<pframes_t>    _freewheel_block_size;
 	/// number of samples between each check for changes in monitor input
 	samplecnt_t                monitor_check_interval;
 	/// time of the last monitor check in samples
