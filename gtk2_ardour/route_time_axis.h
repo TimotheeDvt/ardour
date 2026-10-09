@@ -322,6 +322,9 @@ private:
 	void folder_menu_remove_bus ();
 
 	void update_folder_strip ();
+	void rebind_folder_list_connections ();
+	void folder_removed (std::shared_ptr<ARDOUR::TrackFolder>);
+	void set_folder_membership (std::shared_ptr<ARDOUR::TrackFolder>);
 
 	std::shared_ptr<ARDOUR::TrackFolder> _folder;
 	ArdourWidgets::ArdourButton*         _folder_collapse_button;
@@ -335,14 +338,11 @@ private:
 	std::shared_ptr<ARDOUR::TrackFolder> _folder_membership;
 	Gtk::EventBox              _folder_strip;
 	PBD::ScopedConnectionList  _folder_membership_connections;
-
-public:
-	/** (Re)check which folder (if any) this route is a plain member of, and
-	 *  update the header colour strip and reactive connections accordingly.
-	 *  Called once when the route is set, and by the editor after any action
-	 *  that may change this route's folder membership (e.g. adding it to an
-	 *  existing folder).
+	/** membership signals of every folder in the session (a route may be
+	 *  added to any of them, including via undo/redo)
 	 */
+	PBD::ScopedConnectionList  _folder_list_connections;
+
 	void check_folder_membership ();
 };
 

@@ -8622,10 +8622,6 @@ Editor::create_folder_from_selection ()
 			r->output ()->disconnect ();
 			r->output ()->connect_ports_to_bundle (folder->bus ()->input ()->bundle (), false, true);
 		}
-		RouteTimeAxisView* rtav = rtav_from_route (r);
-		if (rtav) {
-			rtav->check_folder_membership ();
-		}
 	}
 
 	if (!target || ambiguous) {
