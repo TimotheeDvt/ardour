@@ -346,7 +346,7 @@ RouteTimeAxisView::set_route (std::shared_ptr<Route> rt)
 	gm.get_level_meter().signal_scroll_event().connect (sigc::mem_fun (*this, &RouteTimeAxisView::controls_ebox_scroll), false);
 
 	check_folder_bus ();
-	check_folder_membership ();
+	rebind_folder_list_connections ();
 }
 
 RouteTimeAxisView::~RouteTimeAxisView ()
@@ -459,14 +459,51 @@ RouteTimeAxisView::folder_property_changed (PBD::PropertyChange const& what_chan
 	}
 }
 
+/** (Re)connect to the membership signals of every folder in the session,
+ *  since a route can join any of them at any time: a new folder is filled
+ *  before it is added to the session's list, undo/redo replaces membership
+ *  wholesale via TrackFolderList::set_state(), and a folder may gain or
+ *  lose its merged bus (which then owns the folder's color).
+ */
+void
+RouteTimeAxisView::rebind_folder_list_connections ()
+{
+	_folder_list_connections.drop_connections ();
+
+	if (!_session || !_route) {
+		return;
+	}
+
+	TrackFolderList* tfl = _session->track_folders ();
+
+	tfl->TrackFolderAdded.connect (_folder_list_connections, invalidator (*this), std::bind (&RouteTimeAxisView::rebind_folder_list_connections, this), gui_context ());
+	tfl->TrackFolderRemoved.connect (_folder_list_connections, invalidator (*this), std::bind (&RouteTimeAxisView::folder_removed, this, _1), gui_context ());
+
+	for (auto const& f : tfl->list ()) {
+		f->RouteAdded.connect (_folder_list_connections, invalidator (*this), std::bind (&RouteTimeAxisView::check_folder_membership, this), gui_context ());
+		f->RouteRemoved.connect (_folder_list_connections, invalidator (*this), std::bind (&RouteTimeAxisView::check_folder_membership, this), gui_context ());
+		f->BusChanged.connect (_folder_list_connections, invalidator (*this), std::bind (&RouteTimeAxisView::check_folder_membership, this), gui_context ());
+	}
+
+	check_folder_membership ();
+}
+
+void
+RouteTimeAxisView::folder_removed (std::shared_ptr<TrackFolder> f)
+{
+	rebind_folder_list_connections ();
+
+	/* TrackFolderList::set_state() emits TrackFolderRemoved before the
+	 * folder is actually dropped from its list, so it may still be found.
+	 */
+	if (_folder_membership == f) {
+		set_folder_membership (std::shared_ptr<TrackFolder> ());
+	}
+}
+
 /** Check whether this route is a plain member of a TrackFolder (as opposed
  *  to being a folder's own merged bus, which is tracked via _folder/set_folder
- *  above), and (re)connect to that folder so the header strip stays in sync
- *  with its color and with this route leaving it. Called once when the route
- *  is set, and by the editor after any action that may change this route's
- *  membership (a route can only ever gain a new folder via an explicit,
- *  editor-driven action, so there is no need to watch every other folder in
- *  the session for that).
+ *  above).
  */
 void
 RouteTimeAxisView::check_folder_membership ()
@@ -475,19 +512,20 @@ RouteTimeAxisView::check_folder_membership ()
 		return;
 	}
 
-	std::shared_ptr<TrackFolder> f = _session->track_folders ()->folder_for_route (_route);
+	set_folder_membership (_session->track_folders ()->folder_for_route (_route));
+}
 
-	if (f == _folder_membership) {
-		update_folder_strip ();
-		return;
-	}
-
+void
+RouteTimeAxisView::set_folder_membership (std::shared_ptr<TrackFolder> f)
+{
+	/* always reconnect, even if unchanged: the folder may have gained or
+	 * lost its bus, which changes where its color comes from.
+	 */
 	_folder_membership_connections.drop_connections ();
 	_folder_membership = f;
 
 	if (_folder_membership) {
 		_folder_membership->PropertyChanged.connect (_folder_membership_connections, invalidator (*this), std::bind (&RouteTimeAxisView::update_folder_strip, this), gui_context ());
-		_folder_membership->RouteRemoved.connect (_folder_membership_connections, invalidator (*this), std::bind (&RouteTimeAxisView::check_folder_membership, this), gui_context ());
 		if (_folder_membership->has_bus ()) {
 			/* TrackFolder::set_color() forwards to the bus's own
 			 * PresentationInfo when merged, and does not itself emit
