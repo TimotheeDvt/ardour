@@ -171,7 +171,10 @@ FolderRegionGhosts::add_region_ghost (RegionView* rv)
 		return;
 	}
 
-	GhostRegion* gr = rv->add_ghost (_target);
+	/* go via the target view so it tracks the ghost and resizes it
+	 * along with itself (e.g. "Fit All tracks").
+	 */
+	GhostRegion* gr = _target.add_tracked_ghost (rv);
 	if (!gr) {
 		return;
 	}

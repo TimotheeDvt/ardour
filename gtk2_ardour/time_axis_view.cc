@@ -1145,11 +1145,22 @@ TimeAxisView::get_inverted_selectables (Selection& sel, list<Selectable*>& resul
 void
 TimeAxisView::add_ghost (RegionView* rv)
 {
+	add_tracked_ghost (rv);
+}
+
+/** Add a ghost of @p rv to this view, keeping track of it so that it is
+ *  resized along with this view; returns the new ghost (if any).
+ */
+GhostRegion*
+TimeAxisView::add_tracked_ghost (RegionView* rv)
+{
 	GhostRegion* gr = rv->add_ghost (*this);
 
 	if (gr) {
 		ghosts.push_back(gr);
 	}
+
+	return gr;
 }
 
 void
