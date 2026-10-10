@@ -1212,7 +1212,8 @@ private:
 	double _fixed_grab_y;
 	double _cumulative_y_drag;
 	std::map<RegionView*, ARDOUR::gain_t> _initial_gain;
-	static double _zero_gain_fraction;
+	ARDOUR::gain_t _max_gain;
+	double _zero_gain_fraction;
 };
 
 /** Marker drag */

@@ -5710,6 +5710,8 @@ Editor::normalize_region_to_minus_one_db ()
 
 		arv->region()->clear_changes ();
 		arv->audio_region()->normalize (amp, -1.0);
+		/* let the region-gain node go up to 6dB above the normalized level */
+		arv->audio_region()->set_gain_node_max (fabsf (arv->audio_region()->scale_amplitude ()) * dB_to_coefficient (6.0));
 
 		if (!in_command) {
 			begin_reversible_command (_("normalize to -1dB"));

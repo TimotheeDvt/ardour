@@ -81,6 +81,7 @@ namespace ARDOUR {
 		PBD::PropertyDescriptor<bool> fade_out_active;
 		PBD::PropertyDescriptor<bool> fade_before_fx;
 		PBD::PropertyDescriptor<float> scale_amplitude;
+		PBD::PropertyDescriptor<float> gain_node_max;
 		PBD::PropertyDescriptor<std::shared_ptr<AutomationList> > fade_in;
 		PBD::PropertyDescriptor<std::shared_ptr<AutomationList> > inverse_fade_in;
 		PBD::PropertyDescriptor<std::shared_ptr<AutomationList> > fade_out;
@@ -178,6 +179,8 @@ AudioRegion::make_property_quarks ()
 	DEBUG_TRACE (DEBUG::Properties, string_compose ("quark for fade-before-fx = %1\n", Properties::fade_before_fx.property_id));
 	Properties::scale_amplitude.property_id = g_quark_from_static_string (X_("scale-amplitude"));
 	DEBUG_TRACE (DEBUG::Properties, string_compose ("quark for scale-amplitude = %1\n", Properties::scale_amplitude.property_id));
+	Properties::gain_node_max.property_id = g_quark_from_static_string (X_("gain-node-max"));
+	DEBUG_TRACE (DEBUG::Properties, string_compose ("quark for gain-node-max = %1\n", Properties::gain_node_max.property_id));
 	Properties::fade_in.property_id = g_quark_from_static_string (X_("FadeIn"));
 	DEBUG_TRACE (DEBUG::Properties, string_compose ("quark for FadeIn = %1\n", Properties::fade_in.property_id));
 	Properties::inverse_fade_in.property_id = g_quark_from_static_string (X_("InverseFadeIn"));
@@ -202,6 +205,7 @@ AudioRegion::register_properties ()
 	add_property (_fade_out_active);
 	add_property (_fade_before_fx);
 	add_property (_scale_amplitude);
+	add_property (_gain_node_max);
 	add_property (_fade_in);
 	add_property (_inverse_fade_in);
 	add_property (_fade_out);
@@ -217,6 +221,7 @@ AudioRegion::register_properties ()
 	, _fade_out_active (Properties::fade_out_active, true) \
 	, _fade_before_fx (Properties::fade_before_fx, false) \
 	, _scale_amplitude (Properties::scale_amplitude, 1.0) \
+	, _gain_node_max (Properties::gain_node_max, 0.0) \
 	, _fade_in (Properties::fade_in, std::shared_ptr<AutomationList> (new AutomationList (Evoral::Parameter (FadeInAutomation), tdp))) \
 	, _inverse_fade_in (Properties::inverse_fade_in, std::shared_ptr<AutomationList> (new AutomationList (Evoral::Parameter (FadeInAutomation), tdp))) \
 	, _fade_out (Properties::fade_out, std::shared_ptr<AutomationList> (new AutomationList (Evoral::Parameter (FadeOutAutomation), tdp))) \
@@ -230,6 +235,7 @@ AudioRegion::register_properties ()
 	, _fade_out_active (Properties::fade_out_active, other->_fade_out_active) \
 	, _fade_before_fx (Properties::fade_before_fx, other->_fade_before_fx) \
 	, _scale_amplitude (Properties::scale_amplitude, other->_scale_amplitude) \
+	, _gain_node_max (Properties::gain_node_max, other->_gain_node_max) \
 	, _fade_in (Properties::fade_in, std::shared_ptr<AutomationList> (new AutomationList (*other->_fade_in.val()))) \
 	, _inverse_fade_in (Properties::inverse_fade_in, std::shared_ptr<AutomationList> (new AutomationList (*other->_inverse_fade_in.val()))) \
 	, _fade_out (Properties::fade_out, std::shared_ptr<AutomationList> (new AutomationList (*other->_fade_out.val()))) \
@@ -1810,6 +1816,16 @@ AudioRegion::set_scale_amplitude (gain_t g)
 	}
 
 	send_change (PropertyChange (Properties::scale_amplitude));
+}
+
+void
+AudioRegion::set_gain_node_max (gain_t g)
+{
+	if (g == _gain_node_max) {
+		return;
+	}
+	_gain_node_max = g;
+	send_change (PropertyChange (Properties::gain_node_max));
 }
 
 double

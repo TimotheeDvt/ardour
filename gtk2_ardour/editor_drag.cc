@@ -4368,16 +4368,14 @@ FadeOutDrag::aborted (bool)
 	}
 }
 
-double GainNodeDrag::_zero_gain_fraction = -1.0;
-
 GainNodeDrag::GainNodeDrag (Editor& e, ArdourCanvas::Item* i, RegionView* p, list<RegionView*> const& v, Temporal::TimeDomain td)
 	: RegionDrag (e, i, p, v, td)
 	, _fixed_grab_y (0.0)
 	, _cumulative_y_drag (0.0)
 {
-	if (_zero_gain_fraction < 0.0) {
-		_zero_gain_fraction = gain_to_slider_position_with_max (dB_to_coefficient (0.0), AudioRegionView::gain_node_max_gain ());
-	}
+	AudioRegionView* arv = dynamic_cast<AudioRegionView*> (_primary);
+	_max_gain = arv ? arv->gain_node_max_gain () : dB_to_coefficient (25.0);
+	_zero_gain_fraction = gain_to_slider_position_with_max (dB_to_coefficient (0.0), _max_gain);
 
 	DEBUG_TRACE (DEBUG::Drags, "New GainNodeDrag\n");
 }
@@ -4391,7 +4389,7 @@ GainNodeDrag::start_grab (GdkEvent* event, Gdk::Cursor* cursor)
 	std::shared_ptr<AudioRegion> const ar = arv->audio_region ();
 
 	gain_t const g = fabs (ar->scale_amplitude ());
-	double const fraction = max (0.0, min (1.0, gain_to_slider_position_with_max (g, AudioRegionView::gain_node_max_gain ())));
+	double const fraction = max (0.0, min (1.0, gain_to_slider_position_with_max (g, _max_gain)));
 	_fixed_grab_y = (1.0 - fraction) * arv->height ();
 
 	for (list<DraggingView>::iterator i = _views.begin (); i != _views.end (); ++i) {
@@ -4434,7 +4432,7 @@ GainNodeDrag::motion (GdkEvent* event, bool first_motion)
 	}
 
 	double const fraction = 1.0 - (cy / height);
-	gain_t const g = slider_position_to_gain_with_max (fraction, AudioRegionView::gain_node_max_gain ());
+	gain_t const g = slider_position_to_gain_with_max (fraction, _max_gain);
 
 	for (list<DraggingView>::iterator i = _views.begin (); i != _views.end (); ++i) {
 		AudioRegionView* tmp = dynamic_cast<AudioRegionView*> (i->view);
