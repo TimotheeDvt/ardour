@@ -581,6 +581,12 @@ AudioRegionView::setup_fade_handle_positions()
 	}
 }
 
+ARDOUR::gain_t
+AudioRegionView::gain_node_max_gain ()
+{
+	return dB_to_coefficient (25.0);
+}
+
 void
 AudioRegionView::reset_gain_node_position ()
 {
@@ -591,7 +597,7 @@ AudioRegionView::reset_gain_node_position ()
 	std::shared_ptr<AudioRegion> ar = audio_region ();
 	gain_t const g = fabs (ar->scale_amplitude ());
 
-	double fraction = gain_to_slider_position_with_max (g, Config->get_max_gain ());
+	double fraction = gain_to_slider_position_with_max (g, gain_node_max_gain ());
 	fraction = std::max (0.0, std::min (1.0, fraction));
 
 	double const y = (1.0 - fraction) * _height;
