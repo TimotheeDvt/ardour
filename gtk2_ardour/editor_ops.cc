@@ -5680,6 +5680,50 @@ Editor::normalize_region ()
 }
 
 void
+Editor::normalize_region_to_minus_one_db ()
+{
+	if (!_session) {
+		return;
+	}
+
+	RegionSelection rs = get_regions_from_selection_and_entered ();
+
+	if (rs.empty()) {
+		return;
+	}
+
+	CursorRAII cr (*this, _cursors->wait);
+
+	bool in_command = false;
+
+	for (RegionSelection::iterator r = rs.begin(); r != rs.end(); ++r) {
+		AudioRegionView* const arv = dynamic_cast<AudioRegionView*> (*r);
+		if (!arv) {
+			continue;
+		}
+
+		double const amp = arv->audio_region()->maximum_amplitude ();
+		if (amp <= 0) {
+			/* silent region, nothing to normalize */
+			continue;
+		}
+
+		arv->region()->clear_changes ();
+		arv->audio_region()->normalize (amp, -1.0);
+
+		if (!in_command) {
+			begin_reversible_command (_("normalize to -1dB"));
+			in_command = true;
+		}
+		_session->add_command (new StatefulDiffCommand (arv->region()));
+	}
+
+	if (in_command) {
+		commit_reversible_command ();
+	}
+}
+
+void
 Editor::adjust_region_gain (bool up)
 {
 	RegionSelection rs = get_regions_from_selection_and_entered ();

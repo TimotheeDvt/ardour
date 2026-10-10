@@ -1906,6 +1906,7 @@ Editor::add_region_context_items (Menu_Helpers::MenuList& edit_items, std::share
 	const timepos_t position = get_preferred_edit_position (EDIT_IGNORE_NONE, true);
 
 	edit_items.push_back (*_popup_region_menu_item);
+	edit_items.push_back (*manage (_region_actions->get_action ("normalize-region-minus-one-db")->create_menu_item ()));
 	if (Config->get_layer_model() == Manual && track->playlist()->count_regions_at (position) > 1 && (layering_order_editor == 0 || !layering_order_editor->get_visible ())) {
 		edit_items.push_back (*manage (_region_actions->get_action ("choose-top-region-context-menu")->create_menu_item ()));
 	}
