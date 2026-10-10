@@ -338,6 +338,9 @@ AudioRegionView::region_changed (const PropertyChange& what_changed)
 
 	RegionView::region_changed (what_changed);
 
+	if (what_changed.contains (ARDOUR::Properties::gain_node_max)) {
+		reset_gain_node_position ();
+	}
 	if (what_changed.contains (ARDOUR::Properties::scale_amplitude)) {
 		region_scale_amplitude_changed ();
 	}
@@ -582,9 +585,10 @@ AudioRegionView::setup_fade_handle_positions()
 }
 
 ARDOUR::gain_t
-AudioRegionView::gain_node_max_gain ()
+AudioRegionView::gain_node_max_gain () const
 {
-	return dB_to_coefficient (25.0);
+	gain_t const m = audio_region ()->gain_node_max ();
+	return m > 0 ? m : dB_to_coefficient (25.0);
 }
 
 void

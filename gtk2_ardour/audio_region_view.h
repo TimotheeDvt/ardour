@@ -119,8 +119,8 @@ public:
 	void set_fade_visibility (bool);
 	void update_coverage_frame (LayerDisplay);
 
-	/* upper limit of the region-gain node (+25dB) */
-	static ARDOUR::gain_t gain_node_max_gain ();
+	/* upper limit of the region-gain node: set by "Normalize to -1dB", +25dB otherwise */
+	ARDOUR::gain_t gain_node_max_gain () const;
 
 	void update_transient(float old_pos, float new_pos);
 	void remove_transient(float pos);

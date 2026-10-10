@@ -51,6 +51,7 @@ namespace Properties {
 	LIBARDOUR_API extern PBD::PropertyDescriptor<bool> fade_out_active;
 	LIBARDOUR_API extern PBD::PropertyDescriptor<bool> fade_before_fx;
 	LIBARDOUR_API extern PBD::PropertyDescriptor<float> scale_amplitude;
+	LIBARDOUR_API extern PBD::PropertyDescriptor<float> gain_node_max;
 	LIBARDOUR_API extern PBD::PropertyDescriptor<std::shared_ptr<AutomationList> > fade_in;
 	LIBARDOUR_API extern PBD::PropertyDescriptor<std::shared_ptr<AutomationList> > inverse_fade_in;
 	LIBARDOUR_API extern PBD::PropertyDescriptor<std::shared_ptr<AutomationList> > fade_out;
@@ -83,6 +84,10 @@ class LIBARDOUR_API AudioRegion : public Region, public AudioReadable
 
 	void   set_scale_amplitude (gain_t);
 	gain_t scale_amplitude() const { return _scale_amplitude; }
+
+	/** upper limit of the editor's region-gain node, 0 if unset */
+	void   set_gain_node_max (gain_t);
+	gain_t gain_node_max () const { return _gain_node_max; }
 
 	void normalize (float, float target_in_dB = 0.0f);
 
@@ -231,6 +236,8 @@ class LIBARDOUR_API AudioRegion : public Region, public AudioReadable
 	PBD::Property<bool>     _fade_before_fx;
 	/** linear gain to apply to the whole region */
 	PBD::Property<gain_t>   _scale_amplitude;
+	/** upper limit of the editor's region-gain node (0: use default) */
+	PBD::Property<gain_t>   _gain_node_max;
 
 	void register_properties ();
 	void post_set (const PBD::PropertyChange&);
