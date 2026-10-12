@@ -912,6 +912,19 @@ RegionView::move (double x_delta, double y_delta)
 	}
 }
 
+GhostRegion*
+RegionView::add_plain_ghost (TimeAxisView& tv)
+{
+	double const unit_position = _region->position_sample () / samples_per_pixel;
+	GhostRegion* ghost = new PlainGhostRegion (*this, tv, trackview, unit_position);
+
+	ghost->set_height ();
+	ghost->set_duration (_region->length_samples () / samples_per_pixel);
+	ghosts.push_back (ghost);
+
+	return ghost;
+}
+
 void
 RegionView::remove_ghost_in (TimeAxisView& tv)
 {

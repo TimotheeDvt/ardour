@@ -83,6 +83,19 @@ public:
 	ArdourCanvas::Rectangle* base_rect;
 };
 
+/** A ghost that is only a filled rectangle (no waveform or notes),
+ *  cheap enough to show many regions at once (e.g. collapsed folders).
+ */
+class PlainGhostRegion : public GhostRegion {
+public:
+	PlainGhostRegion (RegionView& rv,
+	                  TimeAxisView& tv,
+	                  TimeAxisView& source_tv,
+	                  double initial_unit_pos);
+
+	void set_samples_per_pixel (double) {}
+};
+
 class AudioGhostRegion : public GhostRegion {
 public:
 	AudioGhostRegion(RegionView& rv,

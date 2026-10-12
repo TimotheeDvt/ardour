@@ -93,6 +93,8 @@ public:
 	virtual void region_changed (const PBD::PropertyChange&);
 
 	virtual GhostRegion* add_ghost (TimeAxisView&) = 0;
+	/** add a ghost without waveform/notes, see PlainGhostRegion */
+	GhostRegion* add_plain_ghost (TimeAxisView&);
 	void remove_ghost_in (TimeAxisView&);
 	void remove_ghost (GhostRegion*);
 

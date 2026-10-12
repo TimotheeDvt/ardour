@@ -125,6 +125,19 @@ GhostRegion::is_automation_ghost()
 	return (dynamic_cast<AutomationTimeAxisView*>(&trackview)) != 0;
 }
 
+PlainGhostRegion::PlainGhostRegion (RegionView& rv,
+                                    TimeAxisView& tv,
+                                    TimeAxisView& source_tv,
+                                    double initial_unit_pos)
+	: GhostRegion(rv, tv.ghost_group(), tv, source_tv, initial_unit_pos)
+{
+	CANVAS_DEBUG_NAME (base_rect, "plain ghost region rect");
+	base_rect->set_x0 (0);
+	base_rect->set_y0 (1.0);
+	base_rect->set_y1 (trackview.current_height());
+	base_rect->set_outline (false);
+}
+
 AudioGhostRegion::AudioGhostRegion (RegionView& rv,
                                     TimeAxisView& tv,
                                     TimeAxisView& source_tv,

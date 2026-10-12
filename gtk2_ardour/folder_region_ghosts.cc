@@ -172,9 +172,11 @@ FolderRegionGhosts::add_region_ghost (RegionView* rv)
 	}
 
 	/* go via the target view so it tracks the ghost and resizes it
-	 * along with itself (e.g. "Fit All tracks").
+	 * along with itself (e.g. "Fit All tracks"). Use a plain ghost:
+	 * a collapsed folder can stack hundreds of regions on one row and
+	 * rendering a waveform (or notes) for each of them is too costly.
 	 */
-	GhostRegion* gr = _target.add_tracked_ghost (rv);
+	GhostRegion* gr = _target.add_tracked_ghost (rv, true);
 	if (!gr) {
 		return;
 	}
