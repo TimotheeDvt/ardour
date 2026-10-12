@@ -217,7 +217,7 @@ public:
 	virtual void get_regionviews_at_or_after (Temporal::timepos_t const &, RegionSelection&) {}
 
 	void add_ghost (RegionView*);
-	GhostRegion* add_tracked_ghost (RegionView*);
+	GhostRegion* add_tracked_ghost (RegionView*, bool plain = false);
 	void remove_ghost (RegionView*);
 	void erase_ghost (GhostRegion*);
 

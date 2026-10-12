@@ -1150,11 +1150,12 @@ TimeAxisView::add_ghost (RegionView* rv)
 
 /** Add a ghost of @p rv to this view, keeping track of it so that it is
  *  resized along with this view; returns the new ghost (if any).
+ *  A @p plain ghost has no waveform or notes, see PlainGhostRegion.
  */
 GhostRegion*
-TimeAxisView::add_tracked_ghost (RegionView* rv)
+TimeAxisView::add_tracked_ghost (RegionView* rv, bool plain)
 {
-	GhostRegion* gr = rv->add_ghost (*this);
+	GhostRegion* gr = plain ? rv->add_plain_ghost (*this) : rv->add_ghost (*this);
 
 	if (gr) {
 		ghosts.push_back(gr);
