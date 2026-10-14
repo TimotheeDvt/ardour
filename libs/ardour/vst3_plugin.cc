@@ -1202,6 +1202,10 @@ VST3PI::VST3PI (std::shared_ptr<ARDOUR::VST3PluginModule> m, std::string unique_
 		throw failed_constructor ();
 	}
 
+#if !(defined PLATFORM_WINDOWS || defined __APPLE__) /* Linux only */
+	_restart_component_is_synced = m->has_symbol ("yabridge_version");
+#endif
+
 	PFactoryInfo fi;
 	if (factory->getFactoryInfo (&fi) == kResultTrue) {
 		/* work around issue with UADx VST3s not recognizing
@@ -1210,14 +1214,15 @@ VST3PI::VST3PI (std::shared_ptr<ARDOUR::VST3PluginModule> m, std::string unique_
 		if (0 == strcmp (fi.vendor, "Universal Audio (UADx)")) {
 			_no_kMono = true;
 		}
+		if (0 == strcmp (fi.vendor, "CWITEC")) {
+			/* TX16Wx - #10498 */
+			_restart_component_is_synced = true;
+		}
 	}
 
-#if !(defined PLATFORM_WINDOWS || defined __APPLE__) /* Linux only */
-	_restart_component_is_synced = m->has_symbol ("yabridge_version");
 	if (_restart_component_is_synced) {
 		DEBUG_TRACE (DEBUG::VST3Config, "VST3PI detected yabridge\n");
 	}
-#endif
 
 #ifndef NDEBUG
 	if (DEBUG_ENABLED (DEBUG::VST3Config)) {
@@ -1668,18 +1673,9 @@ VST3PI::restartComponent (int32 flags)
 		 * and restart the EditController.
 		 */
 		Stripable* s = dynamic_cast<Stripable*> (_owner);
-		if (!s) {
-			/* The plugin may call this before it has been assigned to a
-			 * Route/Stripable, e.g. while it is still being instantiated
-			 * (some plugins report kLatencyChanged as part of their own
-			 * setup). There is nothing to restart yet -- activate() will
-			 * query the current latency once the plugin is actually put
-			 * to use.
-			 */
-			DEBUG_TRACE (DEBUG::VST3Callbacks, "VST3PI::restartComponent kLatencyChanged before owner was set (ignored)\n");
-			return kResultOk;
+		if (s) {
+			s->session ().butler ()->delegate ([this]() { deactivate(); activate (); } );
 		}
-		s->session ().butler ()->delegate ([&]() { deactivate(); activate (); } );
 	}
 	if (flags & Vst::kIoTitlesChanged) {
 		/* Input and/or Output bus titles have changed

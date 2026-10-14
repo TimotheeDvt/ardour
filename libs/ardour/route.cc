@@ -5106,11 +5106,12 @@ bool Route::set_name_sequence (std::string const& str)
 		std::string start (matches[2]);
 		std::string end   (matches[3]);
 		bool lowcase = !std::isupper(static_cast<unsigned char>(start[0]));
-		if (lowcase) {
-			end[0] = std::tolower(end[0]);
-		}
-		else{
-			end[0] = std::toupper(end[0]);
+		if (!numeric) {
+			if (lowcase) {
+				end[0] = std::tolower (end[0]);
+			} else{
+				end[0] = std::toupper (end[0]);
+			}
 		}
 		if (PBD::naturally_less (start, end)) {
 			bool iter = false;
@@ -5122,7 +5123,7 @@ bool Route::set_name_sequence (std::string const& str)
 					continue;
 				}
 
-				if (0 != (r->_presentation_info.flags() & flags_mask)) {
+				if (0 == (r->_presentation_info.flags() & flags_mask)) {
 					return true;
 				}
 

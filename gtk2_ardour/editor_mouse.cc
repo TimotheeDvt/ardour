@@ -76,7 +76,6 @@
 #include "keyboard.h"
 #include "editing.h"
 #include "rgb_macros.h"
-#include "control_point_dialog.h"
 #include "editor_drag.h"
 #include "automation_region_view.h"
 #include "edit_note_dialog.h"
@@ -649,22 +648,6 @@ Editor::button_press_handler_1 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 		return true;
 		break;
 
-	case VelocityItem:
-		_drags->set (new LollipopDrag (*this, item), event);
-		return true;
-		break;
-
-	case VelocityBaseItem:
-		{
-			VelocityDisplay* vd = static_cast<VelocityDisplay*> (item->get_data ("ghostregionview"));
-			VelocityGhostRegion* grv = dynamic_cast<VelocityGhostRegion*> (vd);
-			if (grv) {
-				_drags->set (new VelocityLineDrag (*this, grv->base_item(), true, Temporal::BeatTime), event);
-			}
-		}
-		return true;
-		break;
-
 	default:
 		break;
 	}
@@ -777,11 +760,12 @@ Editor::button_press_handler_1 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 	case MouseContent:
 		switch (item_type) {
 		case NoteItem:
-			/* Existing note: allow trimming/motion */
 			if ((note = reinterpret_cast<NoteBase*> (item->get_data ("notebase")))) {
 				if (note->big_enough_to_trim() && note->mouse_near_ends()) {
+					/* Note is big and pointer is near the end, trim */
 					_drags->set (new NoteResizeDrag (*this, item), event, get_canvas_cursor());
 				} else {
+					/* Drag note */
 					_drags->set (new NoteDrag (*this, item), event);
 				}
 			}
@@ -822,7 +806,14 @@ Editor::button_press_handler_1 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 			_drags->set (new RubberbandSelectDrag (*this, item, [&](GdkEvent* ev, timepos_t const & pos) { return this->rb_click (ev, pos); }), event);
 			return true;
 			break;
-
+		case VelocityItem:
+			_drags->set (new LollipopDrag (*this, item), event);
+			return true;
+			break;
+		case VelocityBaseItem:
+			_drags->set (new MidiLollipopsSelectDrag (*this, item, [&](GdkEvent* ev, timepos_t const & pos) { return this->rb_click (ev, pos); }), event);
+			return true;
+			break;
 		default:
 			break;
 		}
@@ -998,6 +989,15 @@ Editor::button_press_handler_1 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 
 				break;
 
+			case VelocityItem:
+				_drags->set (new LollipopDrag (*this, item), event);
+				return true;
+				break;
+
+			case VelocityBaseItem:
+				_drags->set (new MidiLollipopsSelectDrag (*this, item, [&](GdkEvent* ev, timepos_t const & pos) { return this->rb_click (ev, pos); }), event);
+				return true;
+				break;
 			default:
 				break;
 			}
@@ -1148,16 +1148,31 @@ Editor::button_press_handler_1 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 				_drags->set (new RegionCreateDrag (*this, item, clicked_axisview), event);
 			}
 			return true;
-		case RegionItem: {
-			RegionView* rv;
-			if ((rv = dynamic_cast<RegionView*> (clicked_regionview))) {
-				ArdourCanvas::Rectangle* r = dynamic_cast<ArdourCanvas::Rectangle*> (rv->get_canvas_frame());
-				_drags->set (new AutomationDrawDrag (*this, rv->get_canvas_group(), *r, true, Temporal::AudioTime,
-				                                     [&](GdkEvent* ev, timepos_t const & pos) { return rb_click (ev, pos); }), event);
+		case RegionItem:
+			{
+				RegionView* rv;
+				if ((rv = dynamic_cast<RegionView*> (clicked_regionview))) {
+					ArdourCanvas::Rectangle* r = dynamic_cast<ArdourCanvas::Rectangle*> (rv->get_canvas_frame());
+					_drags->set (new AutomationDrawDrag (*this, rv->get_canvas_group(), *r, true, Temporal::AudioTime,
+					                                     [&](GdkEvent* ev, timepos_t const & pos) { return rb_click (ev, pos); }), event);
+					return true;
+				}
+				break;
 			}
-		}
+		case VelocityItem:
+			_drags->set (new LollipopDrag (*this, item), event);
+			return true;
 			break;
-
+		case VelocityBaseItem:
+			{
+				VelocityDisplay* vd = static_cast<VelocityDisplay*> (item->get_data ("ghostregionview"));
+				VelocityGhostRegion* grv = dynamic_cast<VelocityGhostRegion*> (vd);
+				if (grv) {
+					_drags->set (new VelocityLineDrag (*this, grv->base_item(), true, Temporal::BeatTime), event);
+					return true;
+				}
+				break;
+			}
 		default:
 			break;
 		}
@@ -1191,6 +1206,9 @@ bool
 Editor::button_press_handler_2 (ArdourCanvas::Item* item, GdkEvent* event, ItemType item_type)
 {
 	Editing::MouseMode const eff = effective_mouse_mode ();
+
+	NoteBase* note = NULL;
+
 	switch (eff) {
 	case MouseObject:
 		if (_drags->active ()) {
@@ -1239,6 +1257,16 @@ Editor::button_press_handler_2 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 		break;
 
 	case MouseDraw:
+		switch (item_type) {
+		case ControlPointItem:
+			_drags->set (new ControlPointDrag (*this, item), event);
+			return true;
+		case VelocityItem:
+			_drags->set (new LollipopDrag (*this, item), event);
+			return true;
+		default:
+			break;
+		}
 		return false;
 
 	case MouseRange:
@@ -1246,8 +1274,138 @@ Editor::button_press_handler_2 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 		return true;
 		break;
 
+	case MouseContent:
+		switch (item_type) {
+		case NoteItem:
+			if ((note = reinterpret_cast<NoteBase*> (item->get_data ("notebase")))) {
+				if (note->big_enough_to_trim() && note->mouse_near_ends()) {
+					/* Note is big and pointer is near the end, trim */
+					_drags->set (new NoteResizeDrag (*this, item), event, get_canvas_cursor());
+				} else {
+					/* Drag note */
+					_drags->set (new NoteDrag (*this, item), event);
+				}
+			}
+			return true;
+		case ControlPointItem:
+			_drags->set (new ControlPointDrag (*this, item), event);
+			return true;
+		case VelocityItem:
+			_drags->set (new LollipopDrag (*this, item), event);
+			return true;
+		default:
+			break;
+		}
+		break;
+
 	default:
 		break;
+	}
+
+	return false;
+}
+
+bool
+Editor::button_press_handler_3 (ArdourCanvas::Item* item, GdkEvent* event, ItemType item_type)
+{
+	timepos_t where (canvas_event_time (event));
+
+	/* context menu events get handled here */
+	if (Keyboard::is_context_menu_event (&event->button) && !_drags->active ()) {
+
+		context_click_event = *event;
+
+		/* no matter which button pops up the context menu, tell the menu
+		   widget to use button 1 to drive menu selection.
+		*/
+
+		switch (item_type) {
+		case FadeInItem:
+		case FadeInHandleItem:
+		case FadeInTrimHandleItem:
+		case StartCrossFadeItem:
+			popup_xfade_in_context_menu (event->button.button, event->button.time, item, item_type);
+			break;
+
+		case FadeOutItem:
+		case FadeOutHandleItem:
+		case FadeOutTrimHandleItem:
+		case EndCrossFadeItem:
+			popup_xfade_out_context_menu (event->button.button, event->button.time, item, item_type);
+			break;
+
+		case LeftFrameHandle:
+		case RightFrameHandle:
+			break;
+
+		case StreamItem:
+			popup_track_context_menu (event->button.button, event->button.time, item_type, false);
+			break;
+
+		case RegionItem:
+		case RegionViewNameHighlight:
+		case RegionViewName:
+			popup_track_context_menu (event->button.button, event->button.time, item_type, false);
+			break;
+
+		case SelectionItem:
+			popup_track_context_menu (event->button.button, event->button.time, item_type, true);
+			break;
+
+		case AutomationTrackItem:
+			popup_track_context_menu (event->button.button, event->button.time, item_type, false);
+			break;
+
+		case MarkerBarItem:
+		case RangeMarkerBarItem:
+		case SectionMarkerBarItem:
+		case TempoBarItem:
+		case TempoCurveItem:
+		case MeterBarItem:
+		case VideoBarItem:
+		case TimecodeRulerItem:
+		case SamplesRulerItem:
+		case MinsecRulerItem:
+		case BBTRulerItem:
+		case SelectionMarkerItem:
+			snap_to (where, Temporal::RoundNearest, SnapToGrid_Scaled, false);
+			popup_ruler_menu (where, item_type);
+			break;
+
+		case MarkerItem:
+			marker_context_menu (&event->button, item);
+			break;
+
+		case SceneMarkerItem:
+			marker_context_menu (&event->button, item);
+			break;
+
+		case TempoMarkerItem:
+		case MeterMarkerItem:
+		case BBTMarkerItem:
+			tempo_map_marker_context_menu (&event->button, item);
+			break;
+
+		case CrossfadeViewItem:
+			popup_track_context_menu (event->button.button, event->button.time, item_type, false);
+			break;
+
+		case ControlPointItem:
+			popup_control_point_context_menu (item, event);
+			break;
+
+		case NoteItem:
+			if (internal_editing()) {
+				popup_note_context_menu (item, event);
+			}
+			break;
+
+		case GridZoneItem:
+		default:
+			break;
+		}
+
+		return true;
 	}
 
 	return false;
@@ -1276,7 +1434,6 @@ Editor::button_press_handler (ArdourCanvas::Item* item, GdkEvent* event, ItemTyp
 
 	if (!_drags->active () &&
 	    (Keyboard::is_delete_event (&event->button) ||
-	     Keyboard::is_context_menu_event (&event->button) ||
 	     Keyboard::is_edit_event (&event->button))) {
 
 		/* handled by button release */
@@ -1313,6 +1470,7 @@ Editor::button_press_handler (ArdourCanvas::Item* item, GdkEvent* event, ItemTyp
 		break;
 
 	case 3:
+		return button_press_handler_3 (item, event, item_type);
 		break;
 
 	default:
@@ -1448,107 +1606,6 @@ Editor::button_release_handler (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 		return true;
 	}
 
-	/* context menu events get handled here */
-	if (Keyboard::is_context_menu_event (&event->button)) {
-
-		context_click_event = *event;
-
-		if (!_drags->active ()) {
-
-			/* no matter which button pops up the context menu, tell the menu
-			   widget to use button 1 to drive menu selection.
-			*/
-
-			switch (item_type) {
-			case FadeInItem:
-			case FadeInHandleItem:
-			case FadeInTrimHandleItem:
-			case StartCrossFadeItem:
-				popup_xfade_in_context_menu (1, event->button.time, item, item_type);
-				break;
-
-			case FadeOutItem:
-			case FadeOutHandleItem:
-			case FadeOutTrimHandleItem:
-			case EndCrossFadeItem:
-				popup_xfade_out_context_menu (1, event->button.time, item, item_type);
-				break;
-
-			case LeftFrameHandle:
-			case RightFrameHandle:
-				break;
-
-			case StreamItem:
-				popup_track_context_menu (1, event->button.time, item_type, false);
-				break;
-
-			case RegionItem:
-			case RegionViewNameHighlight:
-			case RegionViewName:
-				popup_track_context_menu (1, event->button.time, item_type, false);
-				break;
-
-			case SelectionItem:
-				popup_track_context_menu (1, event->button.time, item_type, true);
-				break;
-
-			case AutomationTrackItem:
-				popup_track_context_menu (1, event->button.time, item_type, false);
-				break;
-
-			case MarkerBarItem:
-			case RangeMarkerBarItem:
-			case SectionMarkerBarItem:
-			case TempoBarItem:
-			case TempoCurveItem:
-			case MeterBarItem:
-			case VideoBarItem:
-			case TimecodeRulerItem:
-			case SamplesRulerItem:
-			case MinsecRulerItem:
-			case BBTRulerItem:
-			case SelectionMarkerItem:
-				snap_to (where, Temporal::RoundNearest, SnapToGrid_Scaled, false);
-				popup_ruler_menu (where, item_type);
-				break;
-
-			case MarkerItem:
-				marker_context_menu (&event->button, item);
-				break;
-
-			case SceneMarkerItem:
-				marker_context_menu (&event->button, item);
-				break;
-
-			case TempoMarkerItem:
-			case MeterMarkerItem:
-			case BBTMarkerItem:
-				tempo_map_marker_context_menu (&event->button, item);
-				break;
-
-			case CrossfadeViewItem:
-				popup_track_context_menu (1, event->button.time, item_type, false);
-				break;
-
-			case ControlPointItem:
-				popup_control_point_context_menu (item, event);
-				break;
-
-			case NoteItem:
-				if (internal_editing()) {
-					popup_note_context_menu (item, event);
-				}
-				break;
-
-			case GridZoneItem:
-			default:
-				break;
-			}
-
-			return true;
-		}
-	}
-
 	/* delete events get handled here */
 
 	Editing::MouseMode const eff = effective_mouse_mode ();
@@ -1650,6 +1707,8 @@ Editor::button_release_handler (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 		}
 
 		switch (eff) {
+		case MouseContent:
+			[[fallthrough]];
 		case MouseDraw:
 			switch (item_type) {
 			case RegionItem:
@@ -1731,16 +1790,9 @@ Editor::button_release_handler (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 			break;
 
 		case MouseDraw:
-			if (item_type == NoteItem) {
-				remove_midi_note (item, event);
-			}
-			return true;
+			break;
 
 		case MouseContent:
-			if (item_type == NoteItem) {
-				remove_midi_note (item, event);
-				return true;
-			}
 			break;
 
 		case MouseRange:
@@ -1889,58 +1941,6 @@ Editor::can_remove_control_point (ArdourCanvas::Item* item)
 	}
 
 	return true;
-}
-
-void
-Editor::remove_control_point (ArdourCanvas::Item* item)
-{
-	if (!can_remove_control_point (item)) {
-		return;
-	}
-
-	ControlPoint* control_point;
-
-	if ((control_point = reinterpret_cast<ControlPoint *> (item->get_data ("control_point"))) == 0) {
-		fatal << _("programming error: control point canvas item has no control point object pointer!") << endmsg;
-		abort(); /*NOTREACHED*/
-	}
-
-	control_point->line().remove_point (*control_point);
-}
-
-void
-Editor::edit_control_point (ArdourCanvas::Item* item)
-{
-	ControlPoint* p = reinterpret_cast<ControlPoint *> (item->get_data ("control_point"));
-
-	if (p == 0) {
-		fatal << _("programming error: control point canvas item has no control point object pointer!") << endmsg;
-		abort(); /*NOTREACHED*/
-	}
-
-	std::vector<ControlPoint*> cps;
-
-	for (auto const& cp : selection->points) {
-		if (&cp->line() == &p->line ()) {
-			cps.push_back (cp);
-		}
-	}
-
-	assert (cps.size() > 0);
-
-	ControlPointDialog d (p, cps.size() > 1);
-
-	if (d.run () != RESPONSE_ACCEPT) {
-		return;
-	}
-
-	if (d.all_selected_points ()) {
-		p->line().modify_points_y (cps, d.get_y_fraction ());
-	} else {
-		cps.clear ();
-		cps.push_back (p);
-		p->line().modify_points_y (cps, d.get_y_fraction ());
-	}
 }
 
 void
