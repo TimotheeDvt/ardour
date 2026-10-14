@@ -913,6 +913,10 @@ RouteTimeAxisView::build_display_menu ()
 			items.push_back (MenuElem (_("Remove Bus (keeps tracks, un-merges folder)"), sigc::mem_fun (*this, &RouteTimeAxisView::folder_menu_remove_bus)));
 		}
 
+		if (_folder_membership) {
+			items.push_back (MenuElem (_("Remove from Folder"), sigc::mem_fun (_editor, &PublicEditor::remove_selected_from_folder)));
+		}
+
 		items.push_back (SeparatorElem());
 
 		build_size_menu ();

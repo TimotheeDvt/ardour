@@ -513,6 +513,9 @@ Editor::register_actions ()
 	act = reg_sens (editor_actions, "create-folder-from-selection", _("Create/Add to Folder from Selection"), (sigc::mem_fun(*this, &Editor::create_folder_from_selection)));
 	ActionManager::stripable_selection_sensitive_actions.push_back (act);
 
+	act = reg_sens (editor_actions, "remove-from-folder", _("Remove Selected Track(s) from Folder"), (sigc::mem_fun(*this, &Editor::remove_selected_from_folder)));
+	ActionManager::stripable_selection_sensitive_actions.push_back (act);
+
 	act = reg_sens (editor_actions, "toggle-folder-collapsed", _("Toggle Selected Folder Collapsed"), (sigc::mem_fun(*this, &Editor::toggle_selected_folder_collapsed)));
 	ActionManager::stripable_selection_sensitive_actions.push_back (act);
 

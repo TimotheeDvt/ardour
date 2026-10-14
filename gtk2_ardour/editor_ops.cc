@@ -8682,6 +8682,79 @@ Editor::create_folder_from_selection ()
 }
 
 void
+Editor::remove_selected_from_folder ()
+{
+	TrackSelection& ts (selection->tracks);
+
+	if (ts.empty ()) {
+		return;
+	}
+
+	TrackFolderList* folders (_session->track_folders ());
+
+	vector<std::pair<std::shared_ptr<TrackFolder>, std::shared_ptr<Route> > > members;
+
+	for (TrackSelection::iterator x = ts.begin (); x != ts.end (); ++x) {
+		RouteTimeAxisView* rtv = dynamic_cast<RouteTimeAxisView*> (*x);
+		if (!rtv) {
+			continue;
+		}
+		/* only plain members: a folder's merged bus row is not "in" the
+		 * folder, it is the folder (use Remove Bus for that).
+		 */
+		std::shared_ptr<TrackFolder> folder = folders->folder_for_route (rtv->route ());
+		if (folder) {
+			members.push_back (std::make_pair (folder, rtv->route ()));
+		}
+	}
+
+	if (members.empty ()) {
+		return;
+	}
+
+	XMLNode& before (folders->get_state ());
+
+	vector<std::shared_ptr<TrackFolder> > touched;
+
+	for (auto const& m : members) {
+		std::shared_ptr<TrackFolder> folder = m.first;
+		std::shared_ptr<Route> r = m.second;
+
+		if (folder->has_bus ()) {
+			/* undo what create_folder_from_selection()/make_bus() did:
+			 * stop feeding the folder's bus, go back to master instead.
+			 */
+			r->output ()->disconnect ();
+			if (_session->master_out ()) {
+				r->output ()->connect_ports_to_bundle (_session->master_out ()->input ()->bundle (), false, true);
+			}
+		}
+
+		folder->remove_route (r);
+
+		if (find (touched.begin (), touched.end (), folder) == touched.end ()) {
+			touched.push_back (folder);
+		}
+	}
+
+	for (auto const& folder : touched) {
+		if (folder->empty ()) {
+			/* drop the now empty folder, but keep its bus (if any) as a
+			 * plain bus rather than deleting a route behind the user's
+			 * back -- same as "Remove Folder (keeps tracks)".
+			 */
+			folders->remove (folder);
+		}
+	}
+
+	XMLNode& after (folders->get_state ());
+
+	begin_reversible_command (members.size () == 1 ? _("Remove Track from Folder") : _("Remove Tracks from Folder"));
+	_session->add_command (new MementoCommand<TrackFolderList> (*folders, &before, &after));
+	commit_reversible_command ();
+}
+
+void
 Editor::toggle_selected_folder_collapsed ()
 {
 	TrackSelection& ts (selection->tracks);
