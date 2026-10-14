@@ -509,6 +509,7 @@
       <menuitem action='find-and-display-stripable'/>
       <menuitem action='duplicate-routes'/>
       <menuitem action='create-folder-from-selection'/>
+      <menuitem action='remove-from-folder'/>
       <separator/>
       <menuitem action='track-record-enable-toggle'/>
       <menuitem action='track-solo-toggle'/>
