@@ -74,6 +74,7 @@
 #include "rgb_macros.h"
 #include "gui_thread.h"
 #include "ui_config.h"
+#include "keyboard.h"
 
 #include "pbd/i18n.h"
 
@@ -138,6 +139,7 @@ AudioRegionView::AudioRegionView (ArdourCanvas::Container *parent, RouteTimeAxis
 	, _rdx_param (UINT32_MAX)
 	, _ignore_line_change (false)
 {
+	audio_region()->set_waveform_envelope_enabled (UIConfiguration::instance().get_apply_envelope_to_waveforms ());
 }
 
 AudioRegionView::AudioRegionView (ArdourCanvas::Container *parent, RouteTimeAxisView &tv, std::shared_ptr<AudioRegion> r, double spu,
@@ -162,6 +164,7 @@ AudioRegionView::AudioRegionView (ArdourCanvas::Container *parent, RouteTimeAxis
 	, _rdx_param (UINT32_MAX)
 	, _ignore_line_change (false)
 {
+	audio_region()->set_waveform_envelope_enabled (UIConfiguration::instance().get_apply_envelope_to_waveforms ());
 }
 
 AudioRegionView::AudioRegionView (const AudioRegionView& other, std::shared_ptr<AudioRegion> other_region)
@@ -185,6 +188,7 @@ AudioRegionView::AudioRegionView (const AudioRegionView& other, std::shared_ptr<
 	, _rdx_param (UINT32_MAX)
 	, _ignore_line_change (false)
 {
+	audio_region()->set_waveform_envelope_enabled (UIConfiguration::instance().get_apply_envelope_to_waveforms ());
 	init (true);
 }
 
@@ -356,6 +360,9 @@ AudioRegionView::region_changed (const PropertyChange& what_changed)
 	if (what_changed.contains (ARDOUR::Properties::fade_out_active)) {
 		fade_out_active_changed ();
 	}
+	if (what_changed.contains (ARDOUR::Properties::envelope)) {
+		envelope_changed ();
+	}
 	if (what_changed.contains (ARDOUR::Properties::envelope_active)) {
 		envelope_active_changed ();
 	}
@@ -433,6 +440,16 @@ AudioRegionView::region_scale_amplitude_changed ()
 	for (uint32_t n = 0; n < waves.size(); ++n) {
 		waves[n]->gain_changed ();
 	}
+
+	AudioGhostRegion* agr;
+	for (vector<GhostRegion*>::iterator i = ghosts.begin(); i != ghosts.end(); ++i) {
+		if ((agr = dynamic_cast<AudioGhostRegion*>(*i)) != 0) {
+			for (vector<ArdourWaveView::WaveView*>::iterator w = agr->waves.begin(); w != agr->waves.end(); ++w) {
+				(*w)->gain_changed ();
+			}
+		}
+	}
+
 	region_renamed ();
 	reset_gain_node_position ();
 }
@@ -1540,8 +1557,9 @@ AudioRegionView::add_gain_point_event (ArdourCanvas::Item *item, GdkEvent *ev, b
 
 	/* compute model y-position */
 	double y;
+	bool ignore_y = ArdourKeyboard::indicates_constraint (ev->button.state) || UIConfiguration::instance().get_new_automation_points_on_lane();
 
-	if (UIConfiguration::instance().get_new_automation_points_on_lane()) {
+	if (ignore_y) {
 		/* new point on the line */
 		y = _fx_line->the_list()->eval (timepos_t (sample_within_region));
 	}  else {
@@ -1709,8 +1727,52 @@ AudioRegionView::exited ()
 }
 
 void
+AudioRegionView::envelope_changed ()
+{
+	bool global_apply_envelope = UIConfiguration::instance().get_apply_envelope_to_waveforms ();
+
+	for (uint32_t n = 0; n < waves.size(); ++n) {
+		waves[n]->envelope_active_changed (global_apply_envelope);
+		if (global_apply_envelope) {
+			waves[n]->envelope_changed ();
+		}
+	}
+
+	AudioGhostRegion* agr;
+
+	for (vector<GhostRegion*>::iterator i = ghosts.begin(); i != ghosts.end(); ++i) {
+		if ((agr = dynamic_cast<AudioGhostRegion*>(*i)) != 0) {
+			for (vector<ArdourWaveView::WaveView*>::iterator w = agr->waves.begin(); w != agr->waves.end(); ++w) {
+				(*w)->envelope_active_changed (global_apply_envelope);
+				if (global_apply_envelope) {
+					(*w)->envelope_changed ();
+				}
+			}
+		}
+	}
+}
+
+void
+AudioRegionView::set_envelope_shifting (bool s)
+{
+	for (uint32_t n = 0; n < waves.size(); ++n) {
+		waves[n]->set_envelope_shifting (s);
+	}
+
+	AudioGhostRegion* agr;
+	for (vector<GhostRegion*>::iterator i = ghosts.begin(); i != ghosts.end(); ++i) {
+		if ((agr = dynamic_cast<AudioGhostRegion*>(*i)) != 0) {
+			for (vector<ArdourWaveView::WaveView*>::iterator w = agr->waves.begin(); w != agr->waves.end(); ++w) {
+				(*w)->set_envelope_shifting (s);
+			}
+		}
+	}
+}
+
+void
 AudioRegionView::envelope_active_changed ()
 {
+	envelope_changed ();
 	set_fx_line_colors ();
 	update_envelope_visibility ();
 }
@@ -1988,6 +2050,9 @@ AudioRegionView::parameter_changed (string const & p)
 	RegionView::parameter_changed (p);
 	if (p == "show-waveforms") {
 		setup_waveform_visibility ();
+	} else if (p == "apply-envelope-to-waveforms") {
+		audio_region()->set_waveform_envelope_enabled (UIConfiguration::instance().get_apply_envelope_to_waveforms ());
+		envelope_changed ();
 	}
 }
 

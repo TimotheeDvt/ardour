@@ -1155,3 +1155,8 @@ ARDOUR::AnyTime::str() const
 	return ss.str ();
 }
 
+void
+ARDOUR::surface_callback (bool only_once, SurfaceCallbackType type, void* arg)
+{
+	ControlProtocolManager::instance().do_surface_callback (only_once, type, arg);
+}

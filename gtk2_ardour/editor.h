@@ -1900,7 +1900,6 @@ private:
 	void stop_canvas_autoscroll ();
 
 	/* trimming */
-	void point_trim (GdkEvent*, Temporal::timepos_t const &);
 
 	void trim_region_front();
 	void trim_region_back();

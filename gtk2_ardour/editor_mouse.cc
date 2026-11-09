@@ -259,7 +259,12 @@ Editor::update_time_selection_display ()
 		/* Clear regions, but not time or tracks, since that
 		 * would destroy the range selection rectangle, which we need to stick
 		 * around for AutomationRangeDrag. */
-		selection->clear_regions ();
+		if (selection->regions.size () != 1 || selection->midi_regions ().size () != 1) {
+			/* Don't clear regions if there's only 1 midi region selected as we
+			 * might be switching mouse modes while working on a midi region
+			 */
+			selection->clear_regions ();
+		}
 		selection->clear_playlists ();
 		/* .. unless there is no track selection (i.e. arrangement section
 		 * selection). In which case time is cleared too.
@@ -272,7 +277,12 @@ Editor::update_time_selection_display ()
 		/* This handles internal edit.
 		   Clear everything except points and notes.
 		*/
-		selection->clear_regions();
+		if (selection->regions.size () != 1 || selection->midi_regions ().size () != 1) {
+			/* Don't clear regions if there's only 1 midi region selected as we
+			 * might be switching mouse modes while working on a midi region
+			 */
+			selection->clear_regions ();
+		}
 		selection->clear_lines();
 		selection->clear_playlists ();
 
@@ -444,7 +454,7 @@ Editor::button_selection (ArdourCanvas::Item* item, GdkEvent* event, ItemType it
 			break;
 
 		case GainLineItem:
-			if (eff_mouse_mode != MouseRange) {
+			if (eff_mouse_mode != MouseRange && eff_mouse_mode != MouseDraw) {
 				EditorAutomationLine* argl = reinterpret_cast<EditorAutomationLine*> (item->get_data ("line"));
 
 				std::list<Selectable*> selectables;
@@ -512,6 +522,14 @@ Editor::button_selection (ArdourCanvas::Item* item, GdkEvent* event, ItemType it
 			}
 			break;
 
+		case VelocityBaseItem:
+			if (press && eff_mouse_mode != MouseDraw && op == SelectionSet) {
+				midi_action (&MidiRegionView::clear_note_selection);
+			}
+			break;
+
+		case VelocityItem:
+			[[fallthrough]];
 		case NoteItem:
 			if (press && event->button.button == 3) {
 				NoteBase* cnote = reinterpret_cast<NoteBase*> (item->get_data ("notebase"));
@@ -787,7 +805,8 @@ Editor::button_press_handler_1 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 			break;
 
 		case DropZoneItem:
-			/* fallthrough: allows starting a selectin from the dropzone */
+			/* allows starting a selectin from the dropzone */
+			[[fallthrough]];
 		case StreamItem:
 			/* in the past, we created a new midi region here, but perhaps that is best left to the Draw mode */
 			/* .. now we allow for rubberband selection (region gain) */
@@ -878,9 +897,9 @@ Editor::button_press_handler_1 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 
 			case RegionItem:
 				if (dynamic_cast<AutomationRegionView*> (clicked_regionview)) {
-					/* click on an automation region view; do nothing here and let the ARV's signal handler
-					   sort it out.
-					*/
+					/* behave in automation region view like in automation track */
+					_drags->set (new RubberbandSelectDrag (*this, item, [&](GdkEvent* ev, timepos_t const & pos) { return this->rb_click (ev, pos); }), event);
+					return true;
 					break;
 				}
 
@@ -1394,6 +1413,8 @@ Editor::button_press_handler_3 (ArdourCanvas::Item* item, GdkEvent* event, ItemT
 			popup_control_point_context_menu (item, event);
 			break;
 
+		case VelocityItem:
+			[[fallthrough]];
 		case NoteItem:
 			if (internal_editing()) {
 				popup_note_context_menu (item, event);
@@ -2066,69 +2087,6 @@ Editor::cancel_time_selection ()
 }
 
 void
-Editor::point_trim (GdkEvent* event, timepos_t const & new_bound)
-{
-	RegionView* rv = clicked_regionview;
-
-	/* Choose action dependent on which button was pressed */
-	switch (event->button.button) {
-	case 1:
-		begin_reversible_command (_("start point trim"));
-
-		if (selection->selected (rv)) {
-			for (list<RegionView*>::const_iterator i = selection->regions.by_layer().begin();
-			     i != selection->regions.by_layer().end(); ++i)
-			{
-				if (!(*i)->region()->locked()) {
-					(*i)->region()->clear_changes ();
-					(*i)->region()->trim_front (new_bound);
-					_session->add_command(new StatefulDiffCommand ((*i)->region()));
-				}
-			}
-
-		} else {
-			if (!rv->region()->locked()) {
-				rv->region()->clear_changes ();
-				rv->region()->trim_front (new_bound);
-				_session->add_command(new StatefulDiffCommand (rv->region()));
-			}
-		}
-
-		commit_reversible_command();
-
-		break;
-	case 2:
-		begin_reversible_command (_("end point trim"));
-
-		if (selection->selected (rv)) {
-
-			for (list<RegionView*>::const_iterator i = selection->regions.by_layer().begin(); i != selection->regions.by_layer().end(); ++i)
-			{
-				if (!(*i)->region()->locked()) {
-					(*i)->region()->clear_changes();
-					(*i)->region()->trim_end (new_bound);
-					_session->add_command(new StatefulDiffCommand ((*i)->region()));
-				}
-			}
-
-		} else {
-
-			if (!rv->region()->locked()) {
-				rv->region()->clear_changes ();
-				rv->region()->trim_end (new_bound);
-				_session->add_command (new StatefulDiffCommand (rv->region()));
-			}
-		}
-
-		commit_reversible_command();
-
-		break;
-	default:
-		break;
-	}
-}
-
-void
 Editor::hide_marker (ArdourCanvas::Item* item, GdkEvent* /*event*/)
 {
 	ArdourMarker* marker;
@@ -2637,7 +2595,13 @@ Editor::line_drag_click (GdkEvent* event, timepos_t const & where, double y)
 
 	if ((atv = dynamic_cast<AutomationTimeAxisView*> (clicked_axisview)) != 0) {
 
-		atv->add_automation_event (event, where, y, false);
+		AutomationRegionView* arv;
+
+		if ((arv = dynamic_cast<AutomationRegionView*> (clicked_regionview)) != 0) {
+			arv->add_automation_event (event);
+		} else {
+			atv->add_automation_event (event, where, y, false);
+		}
 
 	} else if (dynamic_cast<AudioTimeAxisView*> (clicked_axisview) != 0) {
 
