@@ -252,6 +252,12 @@ private:
 
 	Gtk::Menu* _master_volume_menu;
 	ArdourWidgets::ArdourButton* _loudess_analysis_button;
+
+	/* master bus: per-channel mute (L/R) */
+	ArdourWidgets::ArdourButton* _mute_left_button;
+	ArdourWidgets::ArdourButton* _mute_right_button;
+	void channel_mute_button_clicked (uint32_t chn);
+	void update_channel_mute_display ();
 	std::shared_ptr<AutomationController> _volume_controller;
 
 	void setup_comment_button ();

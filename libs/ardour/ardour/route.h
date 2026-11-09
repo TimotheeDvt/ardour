@@ -535,6 +535,14 @@ public:
 		return _volume_applies_to_output;
 	}
 
+	/* Per-channel output mute (used by the master bus "Mute L" / "Mute R"
+	 * buttons). Channel 0 is Left, channel 1 is Right.
+	 * Applied just before the main outs, with a short de-click fade.
+	 */
+	void set_channel_mute (uint32_t chn, bool yn);
+	bool channel_mute (uint32_t chn) const;
+	PBD::Signal<void()> channel_mute_changed;
+
 	/**
 	   Return the first processor that accepts has at least one MIDI input
 	   and at least one audio output. In the vast majority of cases, this
@@ -708,6 +716,10 @@ protected:
 	std::shared_ptr<TriggerBox>        _triggerbox;
 
 	bool _volume_applies_to_output;
+
+	std::atomic<bool> _channel_mute[2];
+	gain_t            _channel_mute_gain[2]; // RT thread only (de-click state)
+	void apply_channel_mute (BufferSet&, pframes_t);
 
 	std::shared_ptr<DelayLine> _delayline;
 

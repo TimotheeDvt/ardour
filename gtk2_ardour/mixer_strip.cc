@@ -134,6 +134,8 @@ MixerStrip::MixerStrip (Mixer_UI& mx, Session* sess, bool in_mixer)
 	, trim_control (ArdourKnob::default_elements, ArdourKnob::Flags (ArdourKnob::Detent | ArdourKnob::ArcToZero))
 	, _master_volume_menu (0)
 	, _loudess_analysis_button (0)
+	, _mute_left_button (0)
+	, _mute_right_button (0)
 	, _visibility (X_("mixer-element-visibility"))
 	, _suspend_menu_callbacks (false)
 	, control_slave_ui (sess)
@@ -171,6 +173,8 @@ MixerStrip::MixerStrip (Mixer_UI& mx, Session* sess, std::shared_ptr<Route> rt, 
 	, trim_control (ArdourKnob::default_elements, ArdourKnob::Flags (ArdourKnob::Detent | ArdourKnob::ArcToZero))
 	, _master_volume_menu (0)
 	, _loudess_analysis_button (0)
+	, _mute_left_button (0)
+	, _mute_right_button (0)
 	, _visibility (X_("mixer-element-visibility"))
 	, _suspend_menu_callbacks (false)
 	, control_slave_ui (sess)
@@ -558,8 +562,43 @@ MixerStrip::set_route (std::shared_ptr<Route> rt)
 		gpm.gain_display.get_parent()->remove (gpm.gain_display);
 	}
 
-	mute_solo_table.attach (gpm.gain_display,0,1,1,2, EXPAND|FILL, EXPAND);
-	mute_solo_table.attach (gpm.peak_display,1,2,1,2, EXPAND|FILL, EXPAND);
+	if (_mute_left_button && _mute_left_button->get_parent ()) {
+		mute_solo_table.remove (*_mute_left_button);
+	}
+	if (_mute_right_button && _mute_right_button->get_parent ()) {
+		mute_solo_table.remove (*_mute_right_button);
+	}
+
+	/* master bus: add a "Mute L" / "Mute R" row below the mute button */
+	const uint32_t meter_row = route()->is_master() ? 2 : 1;
+	mute_solo_table.resize (meter_row + 1, 2);
+
+	if (route()->is_master()) {
+		if (!_mute_left_button) {
+			_mute_left_button = manage (new ArdourButton (_("Mute L")));
+			_mute_left_button->set_name ("mute button");
+			_mute_left_button->set_can_focus (false);
+			_mute_left_button->signal_clicked.connect (sigc::bind (sigc::mem_fun (*this, &MixerStrip::channel_mute_button_clicked), 0));
+			set_tooltip (_mute_left_button, _("Mute the left channel of the master bus output"));
+		}
+		if (!_mute_right_button) {
+			_mute_right_button = manage (new ArdourButton (_("Mute R")));
+			_mute_right_button->set_name ("mute button");
+			_mute_right_button->set_can_focus (false);
+			_mute_right_button->signal_clicked.connect (sigc::bind (sigc::mem_fun (*this, &MixerStrip::channel_mute_button_clicked), 1));
+			set_tooltip (_mute_right_button, _("Mute the right channel of the master bus output"));
+		}
+		mute_solo_table.attach (*_mute_left_button,  0, 1, 1, 2);
+		mute_solo_table.attach (*_mute_right_button, 1, 2, 1, 2);
+		_mute_left_button->show ();
+		_mute_right_button->show ();
+
+		_route->channel_mute_changed.connect (route_connections, invalidator (*this), std::bind (&MixerStrip::update_channel_mute_display, this), gui_context());
+		update_channel_mute_display ();
+	}
+
+	mute_solo_table.attach (gpm.gain_display,0,1,meter_row,meter_row+1, EXPAND|FILL, EXPAND);
+	mute_solo_table.attach (gpm.peak_display,1,2,meter_row,meter_row+1, EXPAND|FILL, EXPAND);
 
 	if (solo_button->get_parent()) {
 		mute_solo_table.remove (*solo_button);
@@ -1720,6 +1759,29 @@ MixerStrip::monitor_section_added_or_removed ()
 	}
 }
 
+void
+MixerStrip::channel_mute_button_clicked (uint32_t chn)
+{
+	if (!_route) {
+		return;
+	}
+	_route->set_channel_mute (chn, !_route->channel_mute (chn));
+}
+
+void
+MixerStrip::update_channel_mute_display ()
+{
+	if (!_route) {
+		return;
+	}
+	if (_mute_left_button) {
+		_mute_left_button->set_active_state (_route->channel_mute (0) ? Gtkmm2ext::ExplicitActive : Gtkmm2ext::Off);
+	}
+	if (_mute_right_button) {
+		_mute_right_button->set_active_state (_route->channel_mute (1) ? Gtkmm2ext::ExplicitActive : Gtkmm2ext::Off);
+	}
+}
+
 /** Called when the metering point has changed */
 void
 MixerStrip::meter_changed ()
@@ -1831,6 +1893,12 @@ MixerStrip::set_button_names ()
 	switch (_width) {
 	case Wide:
 		mute_button->set_text (_("Mute"));
+		if (_mute_left_button) {
+			_mute_left_button->set_text (_("Mute L"));
+		}
+		if (_mute_right_button) {
+			_mute_right_button->set_text (_("Mute R"));
+		}
 		monitor_input_button->set_text (S_("Monitor|In"));
 		monitor_disk_button->set_text (S_("Monitor|Disk"));
 		if (monitor_section_button) {
@@ -1864,6 +1932,12 @@ MixerStrip::set_button_names ()
 			mute_button->set_text (_("Mute"));
 		} else {
 			mute_button->set_text (S_("Mute|M"));
+		}
+		if (_mute_left_button) {
+			_mute_left_button->set_text (S_("MuteLeft|L"));
+		}
+		if (_mute_right_button) {
+			_mute_right_button->set_text (S_("MuteRight|R"));
 		}
 		monitor_input_button->set_text (S_("MonitorInput|I"));
 		monitor_disk_button->set_text (S_("MonitorDisk|D"));

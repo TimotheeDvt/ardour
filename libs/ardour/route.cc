@@ -152,6 +152,11 @@ Route::Route (Session& sess, string name, PresentationInfo::Flag flag, DataType 
 	_pending_listen_change.store (0);
 	_pending_surround_send.store (0);
 	_pending_signals.store (0);
+
+	for (int c = 0; c < 2; ++c) {
+		_channel_mute[c].store (false);
+		_channel_mute_gain[c] = 1.f;
+	}
 }
 
 std::weak_ptr<Route>
@@ -584,6 +589,10 @@ Route::process_output_buffers (BufferSet& bufs,
 			} else {
 				latency += proc->effective_latency ();
 			}
+		}
+
+		if (proc == _main_outs) {
+			apply_channel_mute (bufs, nframes);
 		}
 
 		if (speed < 0) {
@@ -2643,6 +2652,8 @@ Route::state (bool save_template) const
 
 	if (is_master ()) {
 		node->set_property (X_("volume-applies-to-output"), _volume_applies_to_output);
+		node->set_property (X_("mute-left"), channel_mute (0));
+		node->set_property (X_("mute-right"), channel_mute (1));
 	}
 
 	node->add_child_nocopy (_presentation_info.get_state());
@@ -2859,6 +2870,13 @@ Route::set_state (const XMLNode& node, int version)
 	_initial_io_setup = false;
 
 	if (is_master ()) {
+		bool cm;
+		if (node.get_property (X_("mute-left"), cm)) {
+			set_channel_mute (0, cm);
+		}
+		if (node.get_property (X_("mute-right"), cm)) {
+			set_channel_mute (1, cm);
+		}
 		node.get_property (X_("volume-applies-to-output"), _volume_applies_to_output);
 		if (_volume_applies_to_output) {
 			_volume->deactivate ();
@@ -5354,6 +5372,54 @@ Route::set_volume_applies_to_output (bool en)
 	}
 	_volume_applies_to_output = en;
 	_session.set_dirty ();
+}
+
+void
+Route::set_channel_mute (uint32_t chn, bool yn)
+{
+	if (chn > 1 || _channel_mute[chn].load () == yn) {
+		return;
+	}
+	_channel_mute[chn].store (yn);
+	_session.set_dirty ();
+	channel_mute_changed (); /* EMIT SIGNAL */
+}
+
+bool
+Route::channel_mute (uint32_t chn) const
+{
+	if (chn > 1) {
+		return false;
+	}
+	return _channel_mute[chn].load ();
+}
+
+void
+Route::apply_channel_mute (BufferSet& bufs, pframes_t nframes)
+{
+	/* called from process_output_buffers(), right before the main outs */
+	const uint32_t n_audio = std::min<uint32_t> (2, bufs.count ().n_audio ());
+
+	for (uint32_t c = 0; c < n_audio; ++c) {
+		const gain_t target = _channel_mute[c].load () ? 0.f : 1.f;
+		gain_t       g      = _channel_mute_gain[c];
+
+		if (g == target) {
+			if (target == 0.f) {
+				bufs.get_audio (c).silence (nframes);
+			}
+			continue;
+		}
+
+		/* linear de-click ramp over (at most) one cycle */
+		Sample* const sp   = bufs.get_audio (c).data ();
+		const gain_t  step = (target - g) / (gain_t) nframes;
+		for (pframes_t n = 0; n < nframes; ++n) {
+			g     += step;
+			sp[n] *= g;
+		}
+		_channel_mute_gain[c] = target;
+	}
 }
 
 std::shared_ptr<AutomationControl>
