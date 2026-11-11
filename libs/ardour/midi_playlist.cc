@@ -102,7 +102,15 @@ struct EventsSortByTimeAndType {
 				 */
 				return !MidiBuffer::second_simultaneous_midi_byte_is_first (a->buffer ()[0], b->buffer ()[0]);
 			}
-			return a->type () < b->type ();
+			/* Non-MIDI events (e.g. NO_EVENT region-boundary markers)
+			 * may have size 0, so their buffer must not be read.
+			 * Sort them before MIDI events at the same time, so that
+			 * notes are resolved at the boundary first.
+			 */
+			if (a->is_midi () != b->is_midi ()) {
+				return !a->is_midi ();
+			}
+			return a->event_type () < b->event_type ();
 		}
 		return a->time () < b->time ();
 	}
