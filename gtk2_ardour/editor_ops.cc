@@ -7691,6 +7691,9 @@ Editor::quantize_selected_regions ()
 	Beats grid_size = dialog.start_grid_size ();
 
 	if (grid_size <= Beats ()) {
+		ArdourMessageDialog msg (_("Invalid grid size for quantizing."), false, Gtk::MESSAGE_WARNING, Gtk::BUTTONS_OK);
+		msg.set_title (_("Quantize Audio"));
+		msg.run ();
 		return;
 	}
 
@@ -7706,7 +7709,10 @@ Editor::quantize_selected_regions ()
 
 	for (vector<std::shared_ptr<AudioRegion> >::iterator ri = regions.begin (); ri != regions.end (); ++ri) {
 		AnalysisFeatureList positions;
-		(*ri)->transients (positions);
+		/* get_transients() runs the analysis if needed; transients()
+		 * only merges already-cached onsets/user transients.
+		 */
+		(*ri)->get_transients (positions);
 		if (!positions.empty ()) {
 			total_splits += positions.size ();
 			transients[*ri] = positions;
@@ -7714,6 +7720,9 @@ Editor::quantize_selected_regions ()
 	}
 
 	if (transients.empty ()) {
+		ArdourMessageDialog msg (_("No transients were found in the selected region(s), so there is nothing to quantize."), false, Gtk::MESSAGE_INFO, Gtk::BUTTONS_OK);
+		msg.set_title (_("Quantize Audio"));
+		msg.run ();
 		return;
 	}
 
