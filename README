@@ -3,3 +3,41 @@ Please see the Ardour website at https://ardour.org/ for all documentation.
 For information on building Ardour:
 
 https://ardour.org/development.html
+
+
+Fork features
+=============
+
+This fork (https://github.com/TimotheeDvt/ardour) adds the following on top
+of upstream Ardour:
+
+Track folders
+  - Group tracks into folders that can be collapsed/expanded (Alt+C).
+  - Add tracks to an existing folder from the current selection, and
+    "Remove from Folder" in the context menu.
+  - Optional bus per folder; folder and bus rows are merged.
+  - Folder color picker, with a color strip on member tracks.
+  - Collapsed folders show plain rectangle ghosts of their member regions
+    (also on the bus row); folded tracks are ignored when zooming to fit
+    all tracks.
+  - Folders appear in the mixer, with tabs.
+  - Undo/redo support for folder operations.
+
+Audio quantize
+  - Quantize audio regions, with a strength setting and cancel support.
+
+Region gain
+  - Gain node inside the region to adjust the region gain directly.
+  - "Normalize to -1dB" in the region context menu (gain node limited to
+    the normalized level).
+
+Master bus
+  - Mute L / Mute R buttons.
+
+Fixes
+  - Export no longer crashes when the backend enlarges buffers during
+    freewheel; large cycles are processed in chunks.
+  - Plugins declaring bufsz:minBlockLength are supported; removed an assert
+    on VST loading and a BBT offset assert.
+  - Crash on non-MIDI event return, and on closing a session with folders.
+  - Build fix for char8_t issue.
